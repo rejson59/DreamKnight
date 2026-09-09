@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d1626" />
+  <title>Dream Knight - Dream Knight RPG</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- GŁÓWNE MENU -->
+    <div id="main-menu" class="overlay full">
+      <div class="menu-panel">
+        <h1 class="game-title">DREAM KNIGHT</h1>
+        <p class="subtitle">Rycerz Królestwa • otwarty świat 3D</p>
+        <div class="quality-row">
+          <label for="quality">Jakość grafiki</label>
+          <select id="quality">
+            <option value="low">Niska (słabsze urządzenia)</option>
+            <option value="medium" selected>Średnia</option>
+            <option value="high">Wysoka</option>
+            <option value="ultra">Ultra (mocne PC)</option>
+          </select>
+        </div>
+        <button id="btn-start" class="btn primary big">▶ Rozpocznij grę</button>
+        <button id="btn-help" class="btn ghost">Sterowanie / pomoc</button>
+        <p class="version">v1.0 • wersja przeglądarkowa • PC / tablet / mobile</p>
+      </div>
+    </div>
+
+    <!-- POMOC / STEROWANIE -->
+    <div id="help-screen" class="overlay full hidden">
+      <div class="menu-panel">
+        <h2>Sterowanie</h2>
+        <div class="help-grid">
+          <div><b>PC</b></div>
+          <div>WASD / strzałki — ruch</div>
+          <div>Mysz (przycisk) — kamera</div>
+          <div>Lewy przycisk — atak</div>
+          <div>E / dotknij — interakcja</div>
+          <div>I — ekwipunek</div>
+          <div>J — zadania</div>
+          <div>Shift — bieg</div>
+          <div>Esc / M — menu</div>
+          <div><b>Mobilne</b></div>
+          <div>Joystick po lewej — ruch</div>
+          <div>Obszar po prawej — kamera</div>
+          <div>Przyciski — atak, interakcja, menu</div>
+        </div>
+        <button id="btn-help-close" class="btn primary">Zamknij</button>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div id="hud-top-left">
+        <div class="bars">
+          <div class="bar-label">🧡 Zdrowie</div>
+          <div class="bar hp"><div class="bar-fill" id="hp-fill"></div></div>
+          <div class="bar-label">⚡ Energia</div>
+          <div class="bar stam"><div class="bar-fill" id="stam-fill"></div></div>
+        </div>
+        <div id="gold" class="pill">💰 0</div>
+      </div>
+
+      <div id="quest-tracker"></div>
+
+      <div id="minimap-wrap">
+        <canvas id="minimap" width="160" height="160"></canvas>
+      </div>
+
+      <div id="crosshair" class="hidden"></div>
+
+      <div id="interact-prompt" class="hidden">
+        <span id="interact-text"></span>
+      </div>
+
+      <div id="context-hint" class="hidden"></div>
+
+      <div id="hud-buttons">
+        <button class="hud-btn" id="btn-inventory" title="Ekwipunek">🎒</button>
+        <button class="hud-btn" id="btn-quests" title="Zadania">📜</button>
+        <button class="hud-btn" id="btn-menu" title="Menu">☰</button>
+      </div>
+
+      <!-- Dotykowe -->
+      <div id="touch-controls" class="hidden">
+        <div id="joy-zone"><div id="joy-base"><div id="joy-stick"></div></div></div>
+        <div id="look-zone"></div>
+        <div id="touch-buttons">
+          <button id="btn-attack">⚔️</button>
+          <button id="btn-interact">💬</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DIALOG -->
+    <div id="dialogue" class="overlay bottom hidden">
+      <div class="dialogue-box">
+        <div class="dialog-name" id="dialog-name"></div>
+        <div class="dialog-text" id="dialog-text"></div>
+        <div class="dialog-options" id="dialog-options"></div>
+      </div>
+    </div>
+
+    <!-- SKLEP -->
+    <div id="shop" class="overlay full hidden">
+      <div class="menu-panel shop-panel">
+        <h2 id="shop-title">Sklep</h2>
+        <div id="shop-gold"></div>
+        <div class="shop-list" id="shop-list"></div>
+        <button class="btn ghost" id="btn-shop-close">Zamknij</button>
+      </div>
+    </div>
+
+    <!-- EKWIPUNEK -->
+    <div id="inventory" class="overlay full hidden">
+      <div class="menu-panel">
+        <h2>🎒 Ekwipunek</h2>
+        <div id="inv-stats"></div>
+        <div class="inv-grid" id="inv-grid"></div>
+        <button class="btn ghost" id="btn-inventory-close">Zamknij</button>
+      </div>
+    </div>
+
+    <!-- ZADANIA -->
+    <div id="quests-panel" class="overlay full hidden">
+      <div class="menu-panel">
+        <h2>📜 Zadania</h2>
+        <div id="quests-list"></div>
+        <button class="btn ghost" id="btn-quests-close">Zamknij</button>
+      </div>
+    </div>
+
+    <!-- ŚMIERĆ -->
+    <div id="death-screen" class="overlay full hidden">
+      <div class="menu-panel">
+        <h2 class="death-title">⚔️ Zostałeś pokonany</h2>
+        <p>Królestwo potrzebuje swojego rycerza. Odrodzisz się w zamku.</p>
+        <button class="btn primary" id="btn-respawn">Odzyskaj siły</button>
+      </div>
+    </div>
+
+    <!-- TOASTY -->
+    <div id="toast-container"></div>
+
+    <div id="loading-screen" class="overlay full hidden">
+      <div class="loading-inner">
+        <div class="loading-emblem">🛡️</div>
+        <h1>DREAM KNIGHT</h1>
+        <div class="loading-bar"><div id="loading-fill"></div></div>
+        <p id="loading-text">Ładowanie królestwa…</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
