@@ -790,6 +790,7 @@ class Game {
 
   checkReturnActive() {
     if (['herb', 'torch', 'patrol', 'wolf'].every((q) => this.questCompleted[q]) && !this.questCompleted.return_king) {
+      this.activeQuests.return_king = true;
       this.toast('🏰 Nowa misja: Zamelduj się u króla!', 'success');
     }
   }
