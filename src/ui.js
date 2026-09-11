@@ -37,6 +37,7 @@ export class UI {
     $('btn-spell').onclick = () => this.game.player.castFireball(this.game);
     $('btn-torch').onclick = () => this.game.player.toggleTorch(this.game);
     $('btn-horse').onclick = () => this.game.player.mount(this.game);
+    $('cut-skip').onclick = () => this.game.cutscene.skip();
     $('quality2').onchange = (e) => this.game.setQuality(e.target.value);
     if (this.game.audio.muted) $('btn-mute').textContent = '🔇 Dźwięk: wyciszony';
   }
@@ -145,6 +146,31 @@ export class UI {
     $('boss-fill').style.width = `${Math.max(0, frac * 100)}%`;
   }
   hideBoss() { $('boss-bar').classList.add('hidden'); }
+
+  // ---------- CUTSCENKI ----------
+  letterbox(on) {
+    $('letterbox-top').classList.toggle('hidden', !on);
+    $('letterbox-bottom').classList.toggle('hidden', !on);
+    $('cut-skip').classList.toggle('hidden', !on);
+  }
+
+  subtitle(text, who = '') {
+    const box = $('cut-subtitle');
+    if (!text) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    $('cut-sub-who').textContent = who;
+    $('cut-sub-who').style.display = who ? 'block' : 'none';
+    $('cut-sub-text').textContent = text;
+  }
+
+  comboHit(text) {
+    const el = $('combo-hint');
+    el.textContent = text;
+    el.classList.remove('hidden');
+    el.classList.add('combo-big');
+    clearTimeout(this._comboT);
+    this._comboT = setTimeout(() => { el.classList.add('hidden'); el.classList.remove('combo-big'); }, 1400);
+  }
 
   showDeath() { $('death-screen').classList.remove('hidden'); }
   hideDeath() { $('death-screen').classList.add('hidden'); }
@@ -431,6 +457,12 @@ export class UI {
     // obóz goblinów
     x.fillStyle = '#7a3a1e';
     x.beginPath(); x.arc(px(40), px(-205), 5, 0, 7); x.fill();
+    // Zapomniane Ruiny
+    x.fillStyle = '#8a4adf';
+    x.beginPath(); x.arc(px(140), px(240), 6, 0, 7); x.fill();
+    // Szczyt Zguby (arena bossa)
+    x.fillStyle = '#e02020';
+    x.beginPath(); x.arc(px(20), px(-248), 6, 0, 7); x.fill();
     this.mapStatic = c;
   }
 
@@ -508,6 +540,11 @@ export class UI {
       s1_meat: st === 'turnin' ? { x: -24, z: -14 } : { x: 0, z: 200 },
       s2_sheep: st === 'turnin' ? { x: -44, z: 170 } : { x: 31, z: 186 },
       s3_steel: st === 'turnin' ? { x: 28, z: 14 } : { x: -196, z: 62 },
+      q7_ruins: st === 'turnin' ? { x: 0, z: -52 } : { x: 140, z: 240 },
+      q8_darkknight: st === 'turnin' ? { x: 0, z: -52 } : { x: 20, z: -248 },
+      s4_herbs: st === 'turnin' ? { x: 28, z: -12 } : { x: 40, z: 210 },
+      s5_boars: st === 'turnin' ? { x: -44, z: 168 } : { x: -20, z: 220 },
+      s6_letter: { x: -14, z: 4 },
     };
     return spots[qid] || null;
   }

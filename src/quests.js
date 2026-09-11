@@ -42,6 +42,20 @@ export const QUESTS = {
     reward: { gold: 200, xp: 200, items: ['amulet_wind'] },
     requires: ['q5_crystal'],
   },
+  q7_ruins: {
+    name: 'Cienie w ruinach', type: 'main', giver: 'king',
+    desc: 'W Zapomnianych Ruinach na południowym wschodzie powstały szkielety. Król rozkazuje: zniszcz 5 szkieletów i zamelduj się na zamku.',
+    objective: { kind: 'kill', target: 'skeleton', count: 5, turnIn: 'king', label: 'Zniszcz szkielety w ruinach' },
+    reward: { gold: 220, xp: 200, items: ['amulet_stone'] },
+    requires: ['q6_finale'],
+  },
+  q8_darkknight: {
+    name: 'Mroczny Rycerz', type: 'main', giver: 'king',
+    desc: 'Na Szczycie Zguby (najwyższy szczyt Gór Mglistych) stanął Mroczny Rycerz, władca szkieletów. Pokonaj go w uczciwej walce i przynieś królowi wieść o zwycięstwie. To Twoja ostateczna próba!',
+    objective: { kind: 'special', target: 'darkknight_dead', count: 1, turnIn: 'king', label: 'Pokonaj Mrocznego Rycerza' },
+    reward: { gold: 400, xp: 350, items: ['sword_knight'] },
+    requires: ['q7_ruins'],
+  },
   // ---- POBOCZNE ----
   s1_meat: {
     name: 'Dziczyzna dla karczmy', type: 'side', giver: 'innkeeper',
@@ -62,6 +76,27 @@ export const QUESTS = {
     desc: 'Kowal Grimm potrzebuje 4 odłamków kryształu z jaskini, by wykuć wyjątkowe ostrze. Przynieś mu je.',
     objective: { kind: 'collect', target: 'crystal_shard', count: 4, turnIn: 'blacksmith', label: 'Zbierz odłamki kryształu' },
     reward: { gold: 150, xp: 90, items: ['sword_iron'] },
+    requires: ['q1_audience'],
+  },
+  s4_herbs: {
+    name: 'Zapas ziół', type: 'side', giver: 'wizard',
+    desc: 'Eldrin szykuje eliksiry na zimę i potrzebuje 6 słonecznych ziół z łąk na południu. Przynieś mu je do wieży.',
+    objective: { kind: 'collect', target: 'herb_sun', count: 6, turnIn: 'wizard', label: 'Zbierz słoneczne zioła' },
+    reward: { gold: 100, xp: 70, items: ['potion_b', 'potion_b'] },
+    requires: ['q2_herbs'],
+  },
+  s5_boars: {
+    name: 'Dziki szkodniki', type: 'side', giver: 'farmer',
+    desc: 'Dziki rozkopują pole Jona! Przepędź je na zawsze — upoluj 3 dziki w dziczy i wróć na farmę.',
+    objective: { kind: 'kill', target: 'boar', count: 3, turnIn: 'farmer', label: 'Upoluj dziki' },
+    reward: { gold: 110, xp: 80, items: ['meal', 'meal'] },
+    requires: [],
+  },
+  s6_letter: {
+    name: 'List do Aldony', type: 'side', giver: 'miller',
+    desc: 'Młynarz Piotr napisał list do kupczyni Aldony na rynku. Zanieś go jej — to pilne i… osobiste.',
+    objective: { kind: 'talk', target: 'merchant_aldona', label: 'Doręcz list Aldonie' },
+    reward: { gold: 60, xp: 40, items: ['bread', 'bread'] },
     requires: ['q1_audience'],
   },
 };
@@ -212,6 +247,7 @@ export class QuestManager {
     this.game.ui.toast(`🏆 Ukończono: ${q.name}! +${q.reward.gold}💰`, 'quest');
     this.refresh();
     if (id === 'q6_finale') this.game.onFinale();
+    if (id === 'q8_darkknight') this.game.onFinale(true);
     this.game.save();
     return true;
   }

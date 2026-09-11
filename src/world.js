@@ -45,13 +45,15 @@ function distRoad(x, z) {
   let d = 1e9;
   d = Math.min(d, Math.abs(x) * (z > 100 && z < 318 ? 1 : 1e9));           // południowa
   d = Math.min(d, Math.abs(z - 160) * (Math.abs(x) < 235 ? 1 : 1e9));      // wschód-zachód
-  d = Math.min(d, Math.abs(x - 40) * (z < 162 && z > -225 ? 1 : 1e9));     // do gór
+  d = Math.min(d, Math.abs(x - 40) * (z < 162 && z > -262 ? 1 : 1e9));     // do gór i areny
   d = Math.min(d, Math.abs(x + 168) * (z > 55 && z < 165 ? 1 : 1e9));      // do jaskini
   d = Math.min(d, Math.abs(x - 190) * (z > 35 && z < 165 ? 1 : 1e9));      // do lasu
+  d = Math.min(d, Math.abs(x - 140) * (z > 160 && z < 250 ? 1 : 1e9));     // do ruin
   return d;
 }
 
 let campH = null;
+let arenaH = null;
 export function groundHeight(x, z) {
   const sq = sqDist(x, z);
   let h;
@@ -65,6 +67,15 @@ export function groundHeight(x, z) {
     if (campH === null) campH = rawHeight(LOC.goblinCamp.x, LOC.goblinCamp.z);
     h = h * (1 - smoothstep(34, 16, dCamp)) + campH * smoothstep(34, 16, dCamp);
   }
+  // Arena na szczycie (Mroczny Rycerz)
+  const dArena = dist(x, z, LOC.arena.x, LOC.arena.z);
+  if (dArena < 30) {
+    if (arenaH === null) arenaH = rawHeight(LOC.arena.x, LOC.arena.z);
+    h = h * (1 - smoothstep(30, 18, dArena)) + arenaH * smoothstep(30, 18, dArena);
+  }
+  // Ruiny — wyrównanie polany
+  const dRuins = dist(x, z, LOC.ruins.x, LOC.ruins.z);
+  if (dRuins < 30) h = h * (1 - smoothstep(30, 16, dRuins)) + 0.6 * smoothstep(30, 16, dRuins);
   const dFarm = dist(x, z, LOC.farm.x, LOC.farm.z);
   if (dFarm < 34) h = h * (1 - smoothstep(34, 18, dFarm)) + 0.5 * smoothstep(34, 18, dFarm);
   const dMill = dist(x, z, LOC.windmill.x, LOC.windmill.z);
@@ -159,6 +170,10 @@ export class World {
     this.lights = {};
     this.qualityName = quality;
     this.particleF = 1;
+    this._matCache = new Map();
+    this._geoCache = new Map();
+    this.uTime = { value: 0 }; // wspólny czas dla shaderów (wiatr)
+    this.weather = { mode: 'clear', t: 0, next: 90 + Math.random() * 120, flash: 0 };
 
     this.buildLights();
     this.buildSky();
@@ -173,6 +188,8 @@ export class World {
     this.buildMountains();
     this.buildForest();
     this.buildCave();
+    this.buildRuins();
+    this.buildArena();
     this.buildVegetation();
     this.buildParticles();
     this.buildPickups();
@@ -182,22 +199,71 @@ export class World {
   rect(cx, cz, w, d) { this.rects.push({ x1: cx - w / 2, z1: cz - d / 2, x2: cx + w / 2, z2: cz + d / 2 }); }
   circ(x, z, r) { this.circles.push({ x, z, r }); }
 
-  M(color, opts = {}) { return new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0.02, ...opts }); }
+  // Cache'owane materiały i geometrie — mniej pamięci GPU, szybsze ładowanie
+  M(color, opts = {}) {
+    const key = 'm' + color + '|' + (opts.metalness ?? 0.02) + '|' + (opts.roughness ?? 0.9) + '|' +
+      (opts.emissive || 0) + '|' + (opts.emissiveIntensity || 0) + '|' + (opts.transparent ? 1 : 0) + '|' + (opts.opacity ?? 1);
+    let m = this._matCache.get(key);
+    if (!m) {
+      m = new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0.02, ...opts });
+      this._matCache.set(key, m);
+    }
+    return m;
+  }
   TM(map, rx, ry, opts = {}) {
-    const m = map.clone(); m.needsUpdate = true; m.repeat.set(rx, ry);
-    return new THREE.MeshStandardMaterial({ map: m, roughness: 0.9, metalness: 0.02, ...opts });
+    const key = 't' + map.uuid + '|' + rx + '|' + ry + '|' + (opts.metalness ?? 0.02) + '|' + (opts.roughness ?? 0.9);
+    let m = this._matCache.get(key);
+    if (!m) {
+      const t = map.clone(); t.needsUpdate = true; t.repeat.set(rx, ry);
+      m = new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, metalness: 0.02, ...opts });
+      this._matCache.set(key, m);
+    }
+    return m;
+  }
+  _boxGeo(w, h, d) {
+    const key = `b${w},${h},${d}`;
+    let g = this._geoCache.get(key);
+    if (!g) { g = new THREE.BoxGeometry(w, h, d); this._geoCache.set(key, g); }
+    return g;
+  }
+  _cylGeo(rt, rb, h, seg) {
+    const key = `c${rt},${rb},${h},${seg}`;
+    let g = this._geoCache.get(key);
+    if (!g) { g = new THREE.CylinderGeometry(rt, rb, h, seg); this._geoCache.set(key, g); }
+    return g;
   }
   box(w, h, d, material, x = 0, y = 0, z = 0, shadow = true) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+    const m = new THREE.Mesh(this._boxGeo(w, h, d), material);
     m.position.set(x, y, z);
     m.castShadow = shadow; m.receiveShadow = true;
     return m;
   }
   cyl(rt, rb, h, material, x = 0, y = 0, z = 0, seg = 12) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), material);
+    const m = new THREE.Mesh(this._cylGeo(rt, rb, h, seg), material);
     m.position.set(x, y, z);
     m.castShadow = true; m.receiveShadow = true;
     return m;
+  }
+
+  // Wstrzykuje kołysanie na wietrze do materiału instancjonowanego
+  windify(material, amp, key) {
+    const uTime = this.uTime;
+    material.onBeforeCompile = (sh) => {
+      sh.uniforms.uTime = uTime;
+      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec4 iwpos = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+          float swayPh = uTime * 2.1 + iwpos.x * 0.35 + iwpos.z * 0.45;
+          float swayK = smoothstep(-0.5, 1.2, position.y) * ${amp.toFixed(3)};
+          transformed.x += (sin(swayPh) + sin(swayPh * 2.3) * 0.35) * swayK;
+          transformed.z += cos(swayPh * 0.8) * swayK * 0.6;
+        #endif`
+      );
+    };
+    material.customProgramCacheKey = () => 'wind_' + key;
+    return material;
   }
 
   glowSprite(tex, color, scale, opacity = 0.9) {
@@ -352,7 +418,7 @@ export class World {
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
-    const grassTex = this.T.grass.clone(); grassTex.needsUpdate = true; grassTex.repeat.set(110, 110);
+    const grassTex = this.T.grass.clone(); grassTex.needsUpdate = true; grassTex.repeat.set(130, 130);
     const m = new THREE.MeshStandardMaterial({ map: grassTex, vertexColors: true, roughness: 1 });
     this.terrain = new THREE.Mesh(geo, m);
     this.terrain.receiveShadow = true;
@@ -370,6 +436,33 @@ export class World {
     w.position.y = WATER_Y;
     w.receiveShadow = true;
     this.scene.add(w);
+    // Druga warstwa — sunące błyski tafli
+    const spTex = this.T.water.clone(); spTex.needsUpdate = true; spTex.repeat.set(23, 23);
+    this.sparkMat = new THREE.MeshBasicMaterial({
+      map: spTex, color: 0xcfeaff, transparent: true, opacity: 0.18,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const sp = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE), this.sparkMat);
+    sp.rotation.x = -Math.PI / 2;
+    sp.position.y = WATER_Y + 0.07;
+    this.scene.add(sp);
+    // Trzciny wokół stawu
+    const reedM = this.M(0x4a6b2a);
+    const cattM = this.M(0x5a3a1e);
+    this.reeds = [];
+    for (let i = 0; i < 22; i++) {
+      const a = (i / 22) * Math.PI * 2 + Math.random() * 0.2;
+      const r = 17 + Math.random() * 5;
+      const rx = LOC.forestPond.x + Math.cos(a) * r, rz = LOC.forestPond.z + Math.sin(a) * r;
+      const ry = Math.max(groundHeight(rx, rz), WATER_Y - 0.2);
+      const hgt = 1.2 + Math.random() * 0.9;
+      const reed = this.cyl(0.03, 0.045, hgt, reedM, rx, ry + hgt / 2, rz, 5);
+      this.scene.add(reed);
+      if (Math.random() < 0.6) {
+        this.scene.add(this.cyl(0.07, 0.07, 0.35, cattM, rx, ry + hgt - 0.2, rz, 6));
+      }
+      this.reeds.push({ m: reed, ph: Math.random() * 9 });
+    }
     // Magiczna poświata stawu
     const glow = new THREE.Mesh(new THREE.CircleGeometry(15, 24),
       new THREE.MeshBasicMaterial({ color: 0x44ddff, transparent: true, opacity: 0.25, depthWrite: false }));
@@ -471,7 +564,7 @@ export class World {
     this.addTorch(4.4, 2.2, 110.5, true);
   }
 
-  addTorch(x, y, z, post = false) {
+  addTorch(x, y, z, post = false, flameColor = 0xffffff, haloColor = 0xffaa44) {
     const g = new THREE.Group();
     if (post) {
       const p = this.cyl(0.09, 0.11, y, this.TM(this.T.woodDark, 1, 1), 0, -y / 2 + 0.1, 0, 8);
@@ -483,10 +576,10 @@ export class World {
     }
     const cup = this.cyl(0.16, 0.1, 0.25, this.M(0x2a2a2e, { metalness: 0.5 }), 0, 0.1, 0, 8);
     g.add(cup);
-    const flame = this.glowSprite(this.T.flame, 0xffffff, 1.1, 0.95);
+    const flame = this.glowSprite(this.T.flame, flameColor, 1.1, 0.95);
     flame.position.y = 0.55;
     g.add(flame);
-    const halo = this.glowSprite(this.T.softWarm, 0xffaa44, 3.2, 0.35);
+    const halo = this.glowSprite(this.T.softWarm, haloColor, 3.2, 0.35);
     halo.position.y = 0.6;
     g.add(halo);
     g.position.set(x, y, z);
@@ -1124,7 +1217,7 @@ export class World {
   buildFarmAndMill() {
     const { x: fx, z: fz } = LOC.farm;
     const gy = groundHeight(fx, fz);
-    const red = this.TM(this.T.wood, 4, 2);
+    const red = this.TM(this.T.wood, 4, 2).clone();
     red.color = new THREE.Color(0xa8442a);
     const barn = new THREE.Group();
     barn.add(this.box(12, 5, 9, red, 0, 2.5, 0));
@@ -1430,6 +1523,134 @@ export class World {
     this.cavePedestal = { x: cx - 16, z: cz };
   }
 
+  // ---------- ZAPOMNIANE RUINY ----------
+  buildRuins() {
+    const { x: rx, z: rz } = LOC.ruins;
+    const ry = 0.6;
+    const marble = this.TM(this.T.marble, 2, 2);
+    const rockM = this.TM(this.T.rock, 2, 2);
+    const slab = new THREE.Mesh(new THREE.CircleGeometry(22, 24), this.TM(this.T.cobble, 8, 8));
+    slab.rotation.x = -Math.PI / 2;
+    slab.position.set(rx, ry + 0.04, rz);
+    slab.receiveShadow = true;
+    this.scene.add(slab);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const px = rx + Math.cos(a) * 15, pz = rz + Math.sin(a) * 15;
+      if (i % 3 === 2) {
+        const col = this.cyl(0.7, 0.8, 5, marble, px, ry + 0.7, pz, 9);
+        col.rotation.z = Math.PI / 2; col.rotation.y = a;
+        this.scene.add(col);
+      } else {
+        const hgt = 4 + Math.random() * 2.5;
+        this.scene.add(this.box(2, 0.6, 2, rockM, px, ry + 0.3, pz));
+        this.scene.add(this.cyl(0.7, 0.8, hgt, marble, px, ry + 0.6 + hgt / 2, pz, 9));
+        if (hgt > 5.5) this.scene.add(this.box(2, 0.5, 2, marble, px, ry + 0.6 + hgt + 0.2, pz));
+      }
+      this.circ(px, pz, 1.4);
+    }
+    this.scene.add(this.cyl(1.6, 2, 1, rockM, rx, ry + 0.5, rz, 8));
+    const darkM = new THREE.MeshStandardMaterial({ color: 0x2a0a3a, emissive: 0x7717aa, emissiveIntensity: 1.6, roughness: 0.2 });
+    const dark = new THREE.Mesh(new THREE.OctahedronGeometry(0.8), darkM);
+    dark.position.set(rx, ry + 2.2, rz);
+    dark.castShadow = true;
+    this.scene.add(dark);
+    this.ruinCrystal = dark;
+    const dg = this.glowSprite(this.T.soft, 0xaa44ff, 5, 0.3);
+    dg.position.set(rx, ry + 2.2, rz);
+    this.scene.add(dg);
+    this.circ(rx, rz, 2.4);
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * 6.28, r = 4 + Math.random() * 16;
+      const px = rx + Math.cos(a) * r, pz = rz + Math.sin(a) * r;
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5 + Math.random() * 0.9, 0), rockM);
+      rock.position.set(px, ry + 0.3, pz);
+      rock.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      rock.castShadow = true; rock.receiveShadow = true;
+      this.scene.add(rock);
+    }
+    const ring = new THREE.Mesh(new THREE.RingGeometry(5.5, 6.5, 32),
+      new THREE.MeshBasicMaterial({ color: 0x551188, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(rx, ry + 0.08, rz);
+    this.scene.add(ring);
+    this.ruinRing = ring;
+    for (let i = 0; i < 5; i++) {
+      const a = Math.random() * 6.28, r = 24 + Math.random() * 14;
+      const px = rx + Math.cos(a) * r, pz = rz + Math.sin(a) * r;
+      const py = groundHeight(px, pz);
+      const trunk = this.cyl(0.25, 0.4, 5, this.TM(this.T.bark, 1, 2), px, py + 2.5, pz, 7);
+      trunk.rotation.z = (Math.random() - 0.5) * 0.3;
+      this.scene.add(trunk);
+      for (let b = 0; b < 3; b++) {
+        const br = this.cyl(0.06, 0.1, 2.2, this.TM(this.T.bark, 1, 1), px, py + 4 + b * 0.4, pz, 5);
+        br.rotation.z = 0.9 + b * 0.5; br.rotation.y = b * 2;
+        this.scene.add(br);
+      }
+      this.circ(px, pz, 0.8);
+    }
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.4;
+      this.addTorch(rx + Math.cos(a) * 10, ry + 2.2, rz + Math.sin(a) * 10, true, 0x88ffaa, 0x44dd77);
+    }
+    this.lights.ruins = this.point(0x9955ff, 18, 26, rx, ry + 4, rz);
+  }
+
+  // ---------- SZCZYT ZGUBY (arena Mrocznego Rycerza) ----------
+  buildArena() {
+    const { x: ax, z: az } = LOC.arena;
+    const ay = groundHeight(ax, az);
+    this.arenaY = ay;
+    const rockM = this.TM(this.T.rock, 4, 4);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(20, 26), this.TM(this.T.cobble, 7, 7));
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.set(ax, ay + 0.05, az);
+    disc.receiveShadow = true;
+    this.scene.add(disc);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      if (Math.abs(a - Math.PI / 2) < 0.3) continue;
+      const px = ax + Math.cos(a) * 19, pz = az + Math.sin(a) * 19;
+      const fang = new THREE.Mesh(new THREE.ConeGeometry(1.6, 5 + Math.random() * 3, 6), rockM);
+      fang.position.set(px, groundHeight(px, pz) + 2.5, pz);
+      fang.castShadow = true; fang.receiveShadow = true;
+      this.scene.add(fang);
+      this.circ(px, pz, 1.8);
+    }
+    const portalM = new THREE.MeshStandardMaterial({ color: 0x1a0515, emissive: 0xcc1133, emissiveIntensity: 1.8, roughness: 0.2 });
+    const portal = new THREE.Mesh(new THREE.OctahedronGeometry(1.6), portalM);
+    portal.scale.y = 2.2;
+    portal.position.set(ax, ay + 3.5, az - 12);
+    portal.castShadow = true;
+    this.scene.add(portal);
+    this.portalCrystal = portal;
+    this.scene.add(this.cyl(2, 2.5, 1, rockM, ax, ay + 0.5, az - 12, 8));
+    const pg = this.glowSprite(this.T.soft, 0xff2244, 9, 0.4);
+    pg.position.set(ax, ay + 3.5, az - 12);
+    this.scene.add(pg);
+    this.circ(ax, az - 12, 2.8);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(3.5, 4.5, 32),
+      new THREE.MeshBasicMaterial({ color: 0xcc1133, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(ax, ay + 0.1, az - 12);
+    this.scene.add(ring);
+    for (const [ox, oz] of [[-8, 6], [8, 6], [-8, -6], [8, -6]]) {
+      this.addTorch(ax + ox, ay + 2.4, az + oz, true, 0xff6666, 0xff3322);
+    }
+    for (const [ox, oz] of [[-12, 0], [12, 0]]) {
+      this.scene.add(this.cyl(0.12, 0.12, 7, this.TM(this.T.woodDark, 1, 2), ax + ox, ay + 3.5, az + oz, 8));
+      const ban = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3.4),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.9, side: THREE.DoubleSide }));
+      ban.position.set(ax + ox + 1.1, ay + 5, az + oz);
+      this.scene.add(ban);
+      const skull = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), this.M(0xe0d8c0));
+      skull.position.set(ax + ox, ay + 7.3, az + oz);
+      skull.castShadow = true;
+      this.scene.add(skull);
+    }
+    this.lights.arena = this.point(0xff3344, 24, 34, ax, ay + 5, az - 8);
+  }
+
   // ---------- ROŚLINNOŚĆ (instancje) ----------
   scatterOK(x, z, forTree = false) {
     const sq = sqDist(x, z);
@@ -1439,6 +1660,8 @@ export class World {
     if (dist(x, z, LOC.forestPond.x, LOC.forestPond.z) < 20) return false;
     if (dist(x, z, LOC.caveCenter.x, LOC.caveCenter.z) < 34) return false;
     if (dist(x, z, LOC.goblinCamp.x, LOC.goblinCamp.z) < 26) return false;
+    if (dist(x, z, LOC.ruins.x, LOC.ruins.z) < 26) return false;
+    if (dist(x, z, LOC.arena.x, LOC.arena.z) < 26) return false;
     if (dist(x, z, LOC.farm.x, LOC.farm.z) < 36) return false;
     if (dist(x, z, LOC.windmill.x, LOC.windmill.z) < 14) return false;
     if (dist(x, z, LOC.stoneCircle.x, LOC.stoneCircle.z) < 12) return false;
@@ -1454,9 +1677,9 @@ export class World {
     const pineG = new THREE.ConeGeometry(2.4, 6.5, 8);
     const magicG = new THREE.IcosahedronGeometry(2.4, 1);
     const trunkM = new THREE.MeshStandardMaterial({ map: this.T.bark, roughness: 1 });
-    const oakM = new THREE.MeshStandardMaterial({ map: this.T.leafOak, roughness: 1, alphaTest: 0.4, side: THREE.DoubleSide });
-    const pineM = new THREE.MeshStandardMaterial({ map: this.T.leafPine, roughness: 1, alphaTest: 0.4, side: THREE.DoubleSide });
-    const magicM = new THREE.MeshStandardMaterial({ map: this.T.leafMagic, roughness: 0.7, emissive: 0x1a5566, emissiveIntensity: 0.7, alphaTest: 0.4, side: THREE.DoubleSide });
+    const oakM = this.windify(new THREE.MeshStandardMaterial({ map: this.T.leafOak, roughness: 1, alphaTest: 0.4, side: THREE.DoubleSide }), 0.22, 'oak');
+    const pineM = this.windify(new THREE.MeshStandardMaterial({ map: this.T.leafPine, roughness: 1, alphaTest: 0.4, side: THREE.DoubleSide }), 0.14, 'pine');
+    const magicM = this.windify(new THREE.MeshStandardMaterial({ map: this.T.leafMagic, roughness: 0.7, emissive: 0x1a5566, emissiveIntensity: 0.7, alphaTest: 0.4, side: THREE.DoubleSide }), 0.26, 'magic');
 
     const trunks = [], oaks = [], pines = [], magics = [];
     let guard = 0;
@@ -1513,6 +1736,7 @@ export class World {
         im.setMatrixAt(i, dummy.matrix);
       });
       im.castShadow = shadow; im.receiveShadow = true;
+      im.frustumCulled = false;
       im.instanceMatrix.needsUpdate = true;
       this.scene.add(im);
       return im;
@@ -1531,7 +1755,8 @@ export class World {
 
     // Trawa (instancje)
     const grassG = new THREE.ConeGeometry(0.16, 0.7, 4);
-    const grassM = new THREE.MeshStandardMaterial({ color: 0x66883c, roughness: 1 });
+    grassG.translate(0, 0.35, 0);
+    const grassM = this.windify(new THREE.MeshStandardMaterial({ color: 0x66883c, roughness: 1 }), 0.16, 'grass');
     const GN = 14000;
     const grass = new THREE.InstancedMesh(grassG, grassM, GN);
     const col = new THREE.Color();
@@ -1541,7 +1766,7 @@ export class World {
       if (!this.scatterOK(x, z)) continue;
       const h = groundHeight(x, z);
       if (h > 30) continue;
-      dummy.position.set(x, h + 0.3, z);
+      dummy.position.set(x, h - 0.05, z);
       dummy.scale.set(rand(0.7, 1.6), rand(0.7, 1.8), rand(0.7, 1.6));
       dummy.rotation.y = rand(0, 3);
       dummy.updateMatrix();
@@ -1550,6 +1775,7 @@ export class World {
       gi++;
     }
     grass.count = gi;
+    grass.frustumCulled = false;
     grass.instanceMatrix.needsUpdate = true;
     if (grass.instanceColor) grass.instanceColor.needsUpdate = true;
     grass.receiveShadow = true;
@@ -1578,6 +1804,7 @@ export class World {
       fi++;
     }
     fl.count = fi;
+    fl.frustumCulled = false;
     fl.instanceMatrix.needsUpdate = true;
     if (fl.instanceColor) fl.instanceColor.needsUpdate = true;
     this.scene.add(fl);
@@ -1602,6 +1829,7 @@ export class World {
       if (s > 1.5) this.circ(x, z, s);
     }
     rocks.count = ri;
+    rocks.frustumCulled = false;
     rocks.instanceMatrix.needsUpdate = true;
     rocks.castShadow = true; rocks.receiveShadow = true;
     this.scene.add(rocks);
@@ -1691,6 +1919,34 @@ export class World {
         e.pos[j] = rand(-70, 70); e.pos[j + 1] = rand(2, 12); e.pos[j + 2] = rand(-70, 70);
         e.vel[j] = rand(1, 3); e.vel[j + 1] = rand(-0.5, 0.2); e.vel[j + 2] = rand(-1, 1);
         e.maxLife[i] = e.life[i] = rand(3, 6);
+      },
+    }));
+    // DESZCZ — podąża za graczem
+    this.rainCenter = { x: 0, y: 0, z: 0 };
+    this.rain = new Emitter(this.scene, this.T.soft, 500, {
+      size: 0.16, color: 0xaaccee, opacity: 0.55, gravity: 0,
+      spawner: (e, i) => {
+        const j = i * 3;
+        const c = this.rainCenter;
+        e.pos[j] = c.x + rand(-28, 28);
+        e.pos[j + 1] = c.y + rand(0, 24);
+        e.pos[j + 2] = c.z + rand(-28, 28);
+        e.vel[j] = 2.5; e.vel[j + 1] = rand(-26, -20); e.vel[j + 2] = 1;
+        e.maxLife[i] = e.life[i] = rand(0.7, 1.1);
+      },
+    });
+    this.rain.points.visible = false;
+    this.emitters.push(this.rain);
+    // Mroczne iskry portalu
+    this.emitters.push(new Emitter(this.scene, this.T.soft, P(50), {
+      size: 0.3, color: 0xff3355, opacity: 0.85, gravity: 1.5, additive: true,
+      spawner: (e, i) => {
+        const j = i * 3;
+        e.pos[j] = LOC.arena.x + rand(-2, 2);
+        e.pos[j + 1] = (this.arenaY || 40) + rand(0, 6);
+        e.pos[j + 2] = LOC.arena.z - 12 + rand(-2, 2);
+        e.vel[j] = rand(-0.5, 0.5); e.vel[j + 1] = rand(1, 3); e.vel[j + 2] = rand(-0.5, 0.5);
+        e.maxLife[i] = e.life[i] = rand(1, 2.5);
       },
     }));
   }
@@ -1805,6 +2061,8 @@ export class World {
 
   zoneAt(x, z) {
     if (dist(x, z, LOC.caveCenter.x, LOC.caveCenter.z) < 34) return 'cave';
+    if (dist(x, z, LOC.arena.x, LOC.arena.z) < 32) return 'arena';
+    if (dist(x, z, LOC.ruins.x, LOC.ruins.z) < 32) return 'ruins';
     if (z < -125) return 'mountains';
     if (dist(x, z, LOC.forest.x, LOC.forest.z) < 100) return 'forest';
     if (sqDist(x, z) < MOAT_IN) {
@@ -1818,32 +2076,84 @@ export class World {
   }
 
   // ---------- JAKOŚĆ ----------
+  setShadow(extent, size) {
+    const c = this.sun.shadow.camera;
+    c.left = -extent; c.right = extent; c.top = extent; c.bottom = -extent;
+    c.updateProjectionMatrix();
+    this.sun.shadow.mapSize.set(size, size);
+    if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
+  }
+
+  // Tryb low: wyłącza cienie drobiazgów (poza postaciami) — duży zysk FPS
+  applyShadowDetail(full) {
+    if (this._shadowFull === full) return;
+    this._shadowFull = full;
+    const walk = (obj, underActor) => {
+      const ua = underActor || !!obj.userData.actor;
+      if (obj.isMesh && !obj.isInstancedMesh && !ua) {
+        if (obj.userData.origShadow === undefined) obj.userData.origShadow = obj.castShadow;
+        if (full) obj.castShadow = obj.userData.origShadow;
+        else {
+          const geo = obj.geometry;
+          if (!geo.boundingSphere) geo.computeBoundingSphere();
+          const r = geo.boundingSphere.radius * Math.max(obj.scale.x, obj.scale.y, obj.scale.z);
+          obj.castShadow = obj.userData.origShadow && r >= 1.1;
+        }
+      }
+      for (const ch of obj.children) walk(ch, ua);
+    };
+    walk(this.scene, false);
+  }
+
   applyQuality(name) {
     this.qualityName = name;
     const q = {
-      low: { grass: 2500, trees: 0.5, particles: 0.4, clouds: 4, shadow: 1024 },
-      medium: { grass: 7000, trees: 0.8, particles: 0.7, clouds: 7, shadow: 2048 },
-      high: { grass: 11000, trees: 1, particles: 1, clouds: 10, shadow: 2048 },
-      ultra: { grass: 14000, trees: 1, particles: 1.3, clouds: 14, shadow: 4096 },
+      low: { grass: 1500, trees: 0.5, particles: 0.35, clouds: 3, shadow: 1024, extent: 60, rain: 150 },
+      medium: { grass: 7000, trees: 0.8, particles: 0.7, clouds: 7, shadow: 2048, extent: 95, rain: 350 },
+      high: { grass: 11000, trees: 1, particles: 1, clouds: 10, shadow: 2048, extent: 110, rain: 500 },
+      ultra: { grass: 14000, trees: 1, particles: 1.3, clouds: 14, shadow: 4096, extent: 130, rain: 500 },
     }[name] || {};
     this.particleF = q.particles;
     if (this.grassMesh) this.grassMesh.count = Math.min(this.grassTotal, q.grass);
     if (this.treeMeshes) this.treeMeshes.forEach((m, i) => { m.count = Math.max(10, (this.treeCounts[i] * q.trees) | 0); });
-    if (this.sun) {
-      this.sun.shadow.mapSize.set(q.shadow, q.shadow);
-      if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
-    }
+    if (this.sun) this.setShadow(q.extent, q.shadow);
     this.clouds.forEach((c, i) => { c.s.visible = i < q.clouds; });
     if (this.lights.wizard) this.lights.wizard.visible = name !== 'low';
     if (this.lights.fountain) this.lights.fountain.visible = name !== 'low';
+    if (this.lights.cave2) this.lights.cave2.visible = name === 'high' || name === 'ultra';
+    if (this.lights.ruins) this.lights.ruins.visible = name !== 'low';
+    this.applyShadowDetail(name !== 'low');
     // emitery: przeskaluj drawRange proporcjonalnie
-    for (const e of this.emitters) e.setCount(e.count * Math.min(1, q.particles));
+    for (const e of this.emitters) {
+      if (e === this.rain) e.setCount(q.rain);
+      else e.setCount(e.count * Math.min(1, q.particles));
+    }
   }
 
   // ---------- AKTUALIZACJA ----------
   update(dt, t, playerPos) {
     this.time = t;
+    this.uTime.value = t;
     this.dayT = (this.dayT + dt / DAY_LENGTH) % 1;
+    // --- POGODA ---
+    const W = this.weather;
+    W.t += dt;
+    if (W.t > W.next) {
+      W.t = 0;
+      if (W.mode === 'clear') {
+        W.mode = 'rain'; W.next = 25 + Math.random() * 40;
+        this.onWeatherChange && this.onWeatherChange('rain');
+      } else {
+        W.mode = 'clear'; W.next = 80 + Math.random() * 140;
+        this.onWeatherChange && this.onWeatherChange('clear');
+      }
+    }
+    const raining = W.mode === 'rain';
+    W.flash = Math.max(0, W.flash - dt * 1.4);
+    if (raining && Math.random() < dt * 0.12 && W.flash <= 0) {
+      W.flash = 1;
+      this.onThunder && this.onThunder();
+    }
     const ang = this.dayT * Math.PI * 2 - Math.PI / 2; // 0 = wschód
     const sunH = Math.sin(ang); // wysokość słońca
     const dayF = smoothstep(-0.08, 0.25, sunH);
@@ -1862,8 +2172,8 @@ export class World {
     const sunCol = new THREE.Color().setHSL(0.1, 0.5, 0.5 + dayF * 0.5);
     if (duskF > 0.3 && dayF < 0.7) sunCol.setHSL(0.05, 0.85, 0.55);
     this.sun.color.copy(sunCol);
-    this.sun.intensity = 0.12 + dayF * 2.6;
-    this.hemi.intensity = 0.18 + dayF * 0.75;
+    this.sun.intensity = (0.12 + dayF * 2.6) * (raining ? 0.45 : 1);
+    this.hemi.intensity = (0.18 + dayF * 0.75) * (raining ? 0.8 : 1) + W.flash * 2.2;
     this.hemi.color.setHSL(0.6, 0.4, 0.25 + dayF * 0.55);
     this.amb.intensity = 0.1 + dayF * 0.06;
 
@@ -1880,9 +2190,21 @@ export class World {
     this.skyU.mid.value.lerp(mid, 0.05);
     this.skyU.bot.value.lerp(bot, 0.05);
     this.skyU.sunDir.value.copy(sd);
-    this.starMat.opacity += ((this.isNight ? 0.9 : 0) - this.starMat.opacity) * 0.03;
+    this.starMat.opacity += (((this.isNight && !raining) ? 0.9 : 0) - this.starMat.opacity) * 0.03;
     this.scene.fog.color.copy(mid).lerp(bot, 0.4);
     if (this.isNight) this.scene.fog.color.set(0x0d1626);
+    if (raining) this.scene.fog.color.lerp(new THREE.Color(0x5a6a7a), 0.5);
+    if (this._baseFogFar === undefined) this._baseFogFar = this.scene.fog.far;
+    const wantFar = this._baseFogFar * (raining ? 0.55 : 1);
+    this.scene.fog.far += (wantFar - this.scene.fog.far) * Math.min(1, dt * 0.8);
+    // deszcz podąża za graczem, znika we wnętrzach
+    if (this.rain && playerPos) {
+      this.rainCenter.x = playerPos.x; this.rainCenter.y = playerPos.y; this.rainCenter.z = playerPos.z;
+      const zn = this.zoneAt(playerPos.x, playerPos.z);
+      const interior = zn === 'castle' || zn === 'tavern' || zn === 'cave';
+      this.rain.points.visible = raining && !interior;
+      this.rain.active = raining && !interior;
+    }
     // Sprite'y słońca/księżyca
     if (playerPos) {
       this.sunSpr.position.set(playerPos.x + sd.x * 800, Math.max(30, sd.y * 800), playerPos.z + sd.z * 800);
@@ -1899,6 +2221,11 @@ export class World {
     if (this.waterMat.map) {
       this.waterMat.map.offset.x = (t * 0.008) % 1;
       this.waterMat.map.offset.y = (t * 0.013) % 1;
+    }
+    if (this.sparkMat) {
+      this.sparkMat.map.offset.x = (0.5 - t * 0.011) % 1;
+      this.sparkMat.map.offset.y = (t * 0.017) % 1;
+      this.sparkMat.opacity = 0.1 + dayF * 0.12;
     }
     if (this.fountainWater) this.fountainWater.rotation.z = t * 0.4;
     if (this.fountainTop) { this.fountainTop.rotation.y = t * 0.8; this.fountainTop.position.y = 4.2 + Math.sin(t * 2) * 0.08; }
@@ -1920,6 +2247,20 @@ export class World {
       }
       p.needsUpdate = true;
     }
+    // Trzciny
+    if (this.reeds) {
+      for (const r of this.reeds) r.m.rotation.x = Math.sin(t * 1.8 + r.ph) * 0.06;
+    }
+    // Kryształy ruin i portalu
+    if (this.ruinCrystal) {
+      this.ruinCrystal.rotation.y = t * 0.7;
+      this.ruinCrystal.position.y = 0.6 + 2.2 + Math.sin(t * 1.6) * 0.15;
+    }
+    if (this.portalCrystal) {
+      this.portalCrystal.rotation.y = -t * 0.5;
+      this.portalCrystal.position.y = (this.arenaY || 40) + 3.5 + Math.sin(t * 1.2) * 0.2;
+    }
+    if (this.ruinRing) this.ruinRing.rotation.z = t * 0.1;
     // Wiatrak
     if (this.windmillBlades) this.windmillBlades.rotation.z = t * 0.5;
     // Kula czarodzieja
@@ -1938,9 +2279,11 @@ export class World {
 
     // Chmury
     for (const c of this.clouds) {
-      c.s.position.x += c.v * dt;
+      c.s.position.x += c.v * dt * (raining ? 2.2 : 1);
       if (c.s.position.x > 550) c.s.position.x = -550;
       c.s.material.opacity = 0.15 + dayF * 0.4;
+      const cc = raining ? 0.45 : 1;
+      c.s.material.color.setScalar(cc);
     }
     // Ptaki (tylko w dzień)
     for (const b of this.birds) {

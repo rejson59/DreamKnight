@@ -39,12 +39,25 @@ function noise(ctx, s, n, colors, rMin = 1, rMax = 3) {
 function grassDetail() {
   const [c, x] = canvas(256);
   x.fillStyle = '#5d7a35'; x.fillRect(0, 0, 256, 256);
+  // duże plamy odcieni
+  for (let i = 0; i < 26; i++) {
+    const g = x.createRadialGradient(Math.random() * 256, Math.random() * 256, 2, Math.random() * 256, Math.random() * 256, 20 + Math.random() * 40);
+    const col = ['#4a6530', '#6b8a42', '#55702c', '#75924a'][(Math.random() * 4) | 0];
+    g.addColorStop(0, col + 'aa'); g.addColorStop(1, col + '00');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  }
   noise(x, 256, 2600, ['#4a6530', '#6b8a42', '#55702c', '#75924a', '#3f5a28'], 1, 2.5);
-  for (let i = 0; i < 900; i++) {
-    x.strokeStyle = ['#6b8a42', '#7fa050', '#4a6530'][(Math.random() * 3) | 0];
-    x.globalAlpha = 0.7; x.lineWidth = 1;
+  for (let i = 0; i < 1500; i++) {
+    x.strokeStyle = ['#6b8a42', '#7fa050', '#4a6530', '#8fb45a'][(Math.random() * 4) | 0];
+    x.globalAlpha = 0.75; x.lineWidth = 1;
     const px = Math.random() * 256, py = Math.random() * 256;
-    x.beginPath(); x.moveTo(px, py); x.lineTo(px + (Math.random() - 0.5) * 4, py - 3 - Math.random() * 4); x.stroke();
+    x.beginPath(); x.moveTo(px, py); x.lineTo(px + (Math.random() - 0.5) * 5, py - 3 - Math.random() * 5); x.stroke();
+  }
+  // drobne listki i kwiatki
+  for (let i = 0; i < 60; i++) {
+    x.globalAlpha = 0.9;
+    x.fillStyle = ['#8fb45a', '#a8cc6a', '#e8e8d0'][(Math.random() * 3) | 0];
+    x.beginPath(); x.ellipse(Math.random() * 256, Math.random() * 256, 1.5, 2.5, Math.random() * 3, 0, 7); x.fill();
   }
   x.globalAlpha = 1;
   return c;
@@ -185,9 +198,11 @@ function marble() {
 
 function bark() {
   const [c, x] = canvas(128);
-  x.fillStyle = '#4a3520'; x.fillRect(0, 0, 128, 128);
-  for (let i = 0; i < 40; i++) {
-    x.strokeStyle = Math.random() < 0.5 ? '#33240f' : '#5f4527';
+  const g0 = x.createLinearGradient(0, 0, 128, 0);
+  g0.addColorStop(0, '#3a2812'); g0.addColorStop(0.35, '#5a4125'); g0.addColorStop(0.65, '#4a3520'); g0.addColorStop(1, '#2e1f0e');
+  x.fillStyle = g0; x.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 56; i++) {
+    x.strokeStyle = Math.random() < 0.5 ? '#2a1d0c' : '#6b4f2d';
     x.lineWidth = 1 + Math.random() * 3;
     const px = Math.random() * 128;
     x.beginPath(); x.moveTo(px, 0);
@@ -222,6 +237,13 @@ function water() {
     x.moveTo(px, y);
     x.quadraticCurveTo(px + len / 2, y + (Math.random() - 0.5) * 8, px + len, y);
     x.stroke();
+  }
+  // drobne błyski tafli
+  for (let i = 0; i < 90; i++) {
+    x.fillStyle = `rgba(220,245,255,${0.08 + Math.random() * 0.14})`;
+    x.beginPath();
+    x.ellipse(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 5, 1 + Math.random() * 1.6, 0, 0, 7);
+    x.fill();
   }
   x.strokeStyle = 'rgba(10,30,40,0.25)';
   for (let i = 0; i < 40; i++) {

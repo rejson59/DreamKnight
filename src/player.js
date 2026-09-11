@@ -1,4 +1,4 @@
-// Gracz: rycerz — ruch, kamera TPP, walka, wierzchowiec, statystyki.
+// Gracz: rycerz — ruch, kamera TPP, walka (kombosy), wierzchowiec, statystyki.
 import * as THREE from 'three';
 import { createHumanoid } from './rig.js';
 import { Inventory, ITEMS } from './items.js';
@@ -16,7 +16,29 @@ export class Player {
     this.group = this.rig.group;
     scene.add(this.group);
 
-    // Latarka / pochodnia gracza
+    // Kusza na plecach (widoczna, gdy wyposażona)
+    this.crossbowMesh = new THREE.Group();
+    const woodM = new THREE.MeshStandardMaterial({ color: 0x5a4020, roughness: 0.9 });
+    const steelM = new THREE.MeshStandardMaterial({ color: 0x9aa0aa, metalness: 0.8, roughness: 0.35 });
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.7), woodM);
+    const bow = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.06, 0.06), steelM);
+    bow.position.z = 0.3;
+    this.crossbowMesh.add(stock, bow);
+    this.crossbowMesh.position.set(0, 0.45, -0.28);
+    this.crossbowMesh.rotation.x = 0.35;
+    this.crossbowMesh.visible = false;
+    this.rig.hips.add(this.crossbowMesh);
+    // Kostur w ręce (gdy wyposażony)
+    this.staffMesh = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 1.5, 7), woodM);
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0x66d0ff, emissive: 0x2299dd, emissiveIntensity: 1.6 }));
+    orb.position.y = 0.82;
+    this.staffMesh.add(pole, orb);
+    this.staffMesh.visible = false;
+    this.rig.handR.add(this.staffMesh);
+
+    // Pochodnia
     this.torchLight = new THREE.PointLight(0xff9a3d, 0, 22, 1.8);
     this.scene.add(this.torchLight);
     this.torchFlame = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -25,7 +47,6 @@ export class Player {
     this.torchFlame.scale.set(0.7, 0.9, 1);
     this.torchFlame.visible = false;
     this.scene.add(this.torchFlame);
-    // Pochodnia w ręce (model)
     this.torchMesh = new THREE.Group();
     const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.8, 7),
       new THREE.MeshStandardMaterial({ color: 0x5a4020, roughness: 1 }));
@@ -37,8 +58,7 @@ export class Player {
     this.inv = new Inventory();
     this.reset(true);
 
-    // Kamera
-    this.camYaw = Math.PI; this.camPitch = 0.32; this.camDist = 7.5;
+    this.camYaw = 0; this.camPitch = 0.32; this.camDist = 7.5;
     this.camPos = new THREE.Vector3();
   }
 
@@ -53,10 +73,14 @@ export class Player {
     this.torchOn = false;
     this.velY = 0; this.grounded = true;
     this.atkT = 0; this.atkCd = 0; this.hurtT = 0;
+    this.combo = 0; this.comboWindow = 0; this.castT = 0;
+    this.landT = 0;
     this.moving = false; this.sprinting = false;
     this.walkPhase = 0;
+    this.knockX = 0; this.knockZ = 0;
     this.group.position.set(LOC.spawn.x, this.world.walkHeight(LOC.spawn.x, LOC.spawn.z), LOC.spawn.z);
-    this.group.rotation.y = Math.PI;
+    this.group.rotation.set(0, Math.PI, 0);
+    this.group.scale.set(1, 1, 1);
     this.camYaw = 0; this.camPitch = 0.32;
     if (fresh) {
       this.inv = new Inventory();
@@ -66,6 +90,7 @@ export class Player {
       this.inv.add('potion_s', 1);
     }
     this.updateTorchVisual();
+    this.updateWeaponMesh();
   }
 
   get atk() { return this.baseAtk + (this.level - 1) * 2 + this.inv.bonus().atk; }
@@ -85,20 +110,29 @@ export class Player {
       if (game) {
         game.audio.play('levelup');
         game.ui.toast(`⭐ Poziom ${this.level}! Zdrowie i atak wzrosły.`, 'quest');
+        game.fx.ring(this.group.position.x, this.group.position.y + 0.2, this.group.position.z, 0xffe27a, 4);
+        game.fx.burst(this.group.position.x, this.group.position.y + 1, this.group.position.z, 0xffe27a, 24, 5, 0.9);
       }
     }
   }
   heal(n) { this.hp = Math.min(this.maxHpTotal, this.hp + n); }
 
+  applyKnock(dx, dz) { this.knockX += dx; this.knockZ += dz; }
+
   takeDamage(amount, fromPos, game) {
-    if (this.dead || (this.hurtT > 0.4)) return;
+    if (this.dead || this.hurtT > 0.4) return;
     const dmg = Math.max(1, Math.round(amount - this.def * 0.7));
     this.hp -= dmg;
     this.hurtT = 0.6;
     if (game) {
       game.audio.play('hurt');
       game.ui.damageFlash();
-      game.ui.toast(`💔 -${dmg} HP`, 'bad');
+      game.fx.dmg(this.group.position.x, this.group.position.y + 2.1, this.group.position.z, dmg, '#ff6b5e');
+      if (fromPos) { // lekki odrzut od ciosu
+        const dx = this.group.position.x - fromPos.x, dz = this.group.position.z - fromPos.z;
+        const d = Math.hypot(dx, dz) || 1;
+        this.applyKnock((dx / d) * 3, (dz / d) * 3);
+      }
     }
     if (this.hp <= 0) {
       this.hp = 0;
@@ -115,6 +149,7 @@ export class Player {
     }
     this.torchOn = !this.torchOn;
     this.updateTorchVisual();
+    this.updateWeaponMesh();
     game.audio.play('click');
     game.ui.toast(this.torchOn ? '🕯️ Zapalono pochodnię' : 'Pochodnia zgaszona');
   }
@@ -123,14 +158,16 @@ export class Player {
     this.torchLight.intensity = this.torchOn ? 26 : 0;
     this.torchFlame.visible = this.torchOn;
     this.torchMesh.visible = this.torchOn;
-    if (this.rig.weaponMesh) this.rig.weaponMesh.visible = !this.torchOn;
   }
 
   updateWeaponMesh() {
-    // pokaż/ukryj miecz zależnie od wyposażenia
     const w = this.inv.equipped('weapon');
     const def = w ? ITEMS[w] : null;
-    if (this.rig.weaponMesh) this.rig.weaponMesh.visible = !this.torchOn && !(def && def.ranged);
+    const isRanged = !!(def && def.ranged);
+    const isStaff = w === 'staff_apprentice';
+    if (this.rig.weaponMesh) this.rig.weaponMesh.visible = !this.torchOn && !isRanged && !isStaff;
+    this.crossbowMesh.visible = isRanged;
+    this.staffMesh.visible = isStaff && !this.torchOn;
   }
 
   get rangedWeapon() {
@@ -144,12 +181,23 @@ export class Player {
     const dead = this.dead;
     this.hurtT = Math.max(0, this.hurtT - dt);
     if (this.atkCd > 0) this.atkCd -= dt;
+    if (this.comboWindow > 0) { this.comboWindow -= dt; if (this.comboWindow <= 0) this.combo = 0; }
+    if (this.landT > 0) this.landT -= dt;
+    if (this.castT > 0) this.castT -= dt / 0.6;
 
-    // Kamera — obrót
     const look = input.consumeLook();
     if (!dead) {
       this.camYaw -= look.dx * 0.0026;
       this.camPitch = Math.max(-0.15, Math.min(1.25, this.camPitch + look.dy * 0.0022));
+    }
+
+    // Odrzut (knockback)
+    if (Math.abs(this.knockX) > 0.05 || Math.abs(this.knockZ) > 0.05) {
+      const p = { x: this.group.position.x, z: this.group.position.z };
+      this.world.tryMove(p, this.knockX * dt, this.knockZ * dt, 0.55, this.group.position.y);
+      this.group.position.x = p.x; this.group.position.z = p.z;
+      this.knockX *= 1 - Math.min(1, dt * 6);
+      this.knockZ *= 1 - Math.min(1, dt * 6);
     }
 
     // Ruch
@@ -158,9 +206,8 @@ export class Player {
     this.sprinting = wantSprint && !dead;
     let speed = (this.mounted ? 10.5 : 5.2) * this.speedMul;
     if (this.sprinting) speed *= 1.55;
-    if (this.atkT > 0) speed *= 0.35;
-    const shallow = this.inShallow();
-    if (shallow) speed *= 0.6;
+    if (this.atkT > 0 || this.castT > 0) speed *= 0.35;
+    if (this.inShallow()) speed *= 0.6;
 
     const fx = -Math.sin(this.camYaw), fz = -Math.cos(this.camYaw);
     const rx = -fz, rz = fx;
@@ -184,6 +231,10 @@ export class Player {
       if (this.sprinting) {
         this.stam = Math.max(0, this.stam - dt * 14);
         if (Math.random() < dt * 6) game.audio.play('step');
+        // kurz spod butów / kopyt
+        if (Math.random() < dt * 8) {
+          game.fx.burst(p.x, this.group.position.y + 0.15, p.z, 0x9a8a6a, 1, 1.2, 0.5);
+        }
       } else if (Math.random() < dt * 3.2) game.audio.play('step');
       if (this.mounted && Math.random() < dt * 4) game.audio.play('horse');
     } else {
@@ -194,7 +245,7 @@ export class Player {
     // Skok / grawitacja
     const gy = this.world.walkHeight(this.group.position.x, this.group.position.z);
     if (!dead && input.jumping() && this.grounded && !this.mounted) {
-      this.velY = 5.2;
+      this.velY = 5.4;
       this.grounded = false;
       game.audio.play('step');
     }
@@ -203,6 +254,11 @@ export class Player {
       this.group.position.y += this.velY * dt;
       if (this.group.position.y <= gy) {
         this.group.position.y = gy;
+        if (this.velY < -7) { // twarde lądowanie
+          this.landT = 0.25;
+          game.fx.burst(this.group.position.x, gy + 0.1, this.group.position.z, 0x9a8a6a, 6, 2.5, 0.4);
+          game.audio.play('step');
+        }
         this.velY = 0; this.grounded = true;
       }
     } else {
@@ -212,22 +268,22 @@ export class Player {
     // Atak
     if (!dead && input.consumeAttack()) this.tryAttack(ctx);
     if (this.atkT > 0) {
-      this.atkT += dt / 0.45;
-      if (this.atkT >= 1) this.atkT = 0;
+      this.atkT += dt / 0.42;
+      if (this.atkT >= 1) { this.atkT = 0; this.comboWindow = 0.9; }
     }
 
-    // Regeneracja z amuletu
     const regen = this.inv.bonus().regen;
     if (regen > 0 && this.hp < this.maxHpTotal) this.hp = Math.min(this.maxHpTotal, this.hp + regen * dt);
 
-    // Koń — pozycja pod graczem
+    // Koń
     if (this.mounted && game.creatures.playerHorse) {
       const h = game.creatures.playerHorse.rig;
       h.group.position.set(this.group.position.x, gy, this.group.position.z);
       h.group.rotation.y = this.group.rotation.y;
       if (this.moving) {
-        h.walkPhase += dt * (this.sprinting ? 11 : 8);
-        h.setWalk(h.walkPhase, this.sprinting ? 1.1 : 0.8);
+        h.walkPhase += dt * (this.sprinting ? 10 : 7);
+        if (this.sprinting) h.setGallop(h.walkPhase);
+        else h.setWalk(h.walkPhase, 0.9);
       } else h.setIdle(ctx.t);
       this.group.position.y = gy + 1.28;
     }
@@ -237,19 +293,30 @@ export class Player {
       this.rig.setDead();
     } else if (this.mounted) {
       this.rig.setSit();
-      if (this.atkT > 0) this.rig.setAttack(Math.min(1, this.atkT));
+      if (this.atkT > 0) this.rig.setAttack(Math.min(1, this.atkT), this.combo % 3);
+    } else if (this.castT > 0) {
+      this.rig.setCast(Math.min(1, Math.max(0, this.castT)));
     } else if (this.atkT > 0) {
-      this.rig.setAttack(Math.min(1, this.atkT));
-      this.rig.legL.rotation.x = 0.25; this.rig.legR.rotation.x = -0.2;
+      this.rig.setAttack(Math.min(1, this.atkT), this.combo % 3);
+    } else if (!this.grounded) {
+      this.rig.setJump();
+    } else if (this.landT > 0) {
+      this.rig.setLand();
+    } else if (this.hurtT > 0.4) {
+      this.rig.setFlinch();
     } else if (this.moving) {
-      this.walkPhase += dt * (this.sprinting ? 11 : 7.5);
-      this.rig.setWalk(this.walkPhase, this.sprinting ? 1.15 : 0.85);
+      if (this.sprinting) {
+        this.walkPhase += dt * 11;
+        this.rig.setRun(this.walkPhase);
+      } else {
+        this.walkPhase += dt * 7.5;
+        this.rig.setWalk(this.walkPhase, 0.85);
+      }
+    } else if (this.rangedWeapon && input.isDown('MouseLeft')) {
+      this.rig.setBowAim();
     } else {
       this.rig.setIdle(ctx.t);
     }
-    // Błysk obrażeń
-    if (this.hurtT > 0.35) this.group.rotation.z = Math.sin(ctx.t * 40) * 0.03;
-    else this.group.rotation.z = 0;
 
     // Pochodnia
     if (this.torchOn) {
@@ -263,7 +330,7 @@ export class Player {
       this.torchLight.intensity = 0;
     }
 
-    // --- KAMERA TPP ---
+    // --- KAMERA TPP (+ trzęsienie) ---
     const target = new THREE.Vector3(
       this.group.position.x,
       this.group.position.y + (this.mounted ? 2.6 : 1.7),
@@ -275,13 +342,19 @@ export class Player {
       target.y + Math.sin(this.camPitch) * dist,
       target.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * dist
     );
-    // kamera nad ziemią
     const camGround = this.world.walkHeight(cp.x, cp.z) + 0.5;
     if (cp.y < camGround) cp.y = camGround;
-    // wygładzenie
     if (!this.camInit) { this.camPos.copy(cp); this.camInit = true; }
     else this.camPos.lerp(cp, Math.min(1, dt * 10));
     camera.position.copy(this.camPos);
+    // shake
+    const sh = game.trauma || 0;
+    if (sh > 0.01) {
+      camera.position.x += (Math.random() - 0.5) * sh * 0.7;
+      camera.position.y += (Math.random() - 0.5) * sh * 0.5;
+      target.x += (Math.random() - 0.5) * sh * 0.4;
+      target.y += (Math.random() - 0.5) * sh * 0.4;
+    }
     camera.lookAt(target);
   }
 
@@ -292,7 +365,7 @@ export class Player {
   }
 
   tryAttack(ctx) {
-    if (this.atkCd > 0 || this.atkT > 0) return;
+    if (this.atkCd > 0 || this.atkT > 0 || this.castT > 0) return;
     const { game } = ctx;
     if (this.stam < 8 && !this.mounted) {
       game.ui.toast('Za mało energii!', 'bad');
@@ -300,14 +373,18 @@ export class Player {
     }
     this.stam = Math.max(0, this.stam - 7);
     this.atkT = 0.001;
-    this.atkCd = this.mounted ? 0.5 : 0.42;
+    this.atkCd = this.mounted ? 0.5 : 0.4;
+    // łańcuch kombosa
+    this.combo = this.comboWindow > 0 ? (this.combo + 1) % 3 : 0;
+    this.comboWindow = 0;
+    if (this.combo === 2) game.ui.comboHit('Potrójny cios! 💥');
     game.audio.play('swing');
 
+    // błysk cięcia
     const dirX = Math.sin(this.group.rotation.y), dirZ = Math.cos(this.group.rotation.y);
-    const px = this.group.position.x, pz = this.group.position.z;
+    game.fx.slash(this.group.position.x + dirX * 1.4, this.group.position.y + 1.3, this.group.position.z + dirZ * 1.4, this.group.rotation.y);
 
     if (this.rangedWeapon) {
-      // strzał z kuszy
       setTimeout(() => {
         if (this.dead) return;
         game.audio.play('bow');
@@ -315,19 +392,19 @@ export class Player {
       }, 120);
       return;
     }
-    // cios wręcz — trafienie w połowie animacji
+    const comboMult = [1, 1.1, 1.5][this.combo];
     setTimeout(() => {
       if (this.dead) return;
-      const dmg = this.atk + Math.random() * 3;
-      const range = this.mounted ? 3.4 : 2.6;
-      // kierunek ciosu = kierunek postaci
+      const dmg = (this.atk + Math.random() * 3) * comboMult;
+      const range = this.mounted ? 3.4 : 2.7;
       const dx = Math.sin(this.group.rotation.y), dz = Math.cos(this.group.rotation.y);
-      const hit = game.creatures.meleeHit(px, pz, dx, dz, range, dmg, game);
+      const hit = game.creatures.meleeHit(this.group.position.x, this.group.position.z, dx, dz, range, dmg, game);
       if (hit) {
         game.audio.play('hit');
         game.ui.hitMarker();
+        if (this.combo === 2) game.shake(0.25);
       }
-    }, 160);
+    }, 150);
   }
 
   castFireball(game) {
@@ -337,11 +414,13 @@ export class Player {
       return;
     }
     if (this.stam < 25) { game.ui.toast('Za mało energii na zaklęcie!', 'bad'); return; }
+    if (this.castT > 0 || this.atkT > 0) return;
     this.stam -= 25;
-    this.atkT = 0.001;
+    this.castT = 1;
     game.audio.play('fireball');
+    game.fx.burst(this.group.position.x, this.group.position.y + 1.6, this.group.position.z, 0xff7733, 10, 3, 0.5);
     const power = 1 + this.inv.bonus().spellPower;
-    setTimeout(() => game.spawnProjectile('fireball', (this.atk + 14) * power), 150);
+    setTimeout(() => { if (!this.dead) game.spawnProjectile('fireball', (this.atk + 14) * power); }, 280);
   }
 
   castHeal(game) {
@@ -351,6 +430,7 @@ export class Player {
     this.stam -= 30;
     this.heal(60 + this.level * 8);
     game.audio.play('heal');
+    game.fx.ring(this.group.position.x, this.group.position.y + 0.2, this.group.position.z, 0x66ff99, 3);
     game.ui.toast('✨ Uleczono rany!', 'gold');
     return true;
   }
@@ -360,6 +440,7 @@ export class Player {
       this.inv.remove('potion_b');
       this.heal(120);
       game.audio.play('potion');
+      game.fx.burst(this.group.position.x, this.group.position.y + 1.2, this.group.position.z, 0x66ff99, 10, 2, 0.6);
       game.ui.toast('⚗️ +120 HP', 'gold');
       return true;
     }
@@ -367,6 +448,7 @@ export class Player {
       this.inv.remove('potion_s');
       this.heal(50);
       game.audio.play('potion');
+      game.fx.burst(this.group.position.x, this.group.position.y + 1.2, this.group.position.z, 0x66ff99, 8, 2, 0.6);
       game.ui.toast('🧪 +50 HP', 'gold');
       return true;
     }
@@ -403,6 +485,7 @@ export class Player {
       }
       this.mounted = true;
       game.audio.play('horse');
+      game.fx.burst(this.group.position.x, this.group.position.y + 0.3, this.group.position.z, 0x9a8a6a, 8, 2, 0.5);
       game.ui.toast('🐎 Jedziesz konno! (H — zsiądź)');
     }
   }
@@ -411,8 +494,9 @@ export class Player {
     this.dead = false;
     this.hp = this.maxHpTotal;
     this.stam = this.maxStam;
+    this.knockX = 0; this.knockZ = 0;
     this.group.rotation.set(0, Math.PI, 0);
-    // komnata rycerza
+    this.group.scale.set(1, 1, 1);
     this.group.position.set(-19, 0.42, -49);
     this.camYaw = 0;
     game.ui.toast('🛡️ Obudziłeś się w swojej komnacie.', 'quest');

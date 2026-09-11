@@ -21,8 +21,8 @@ export const NPC_DEFS = [
   {
     id: 'blacksmith', name: 'Grimm', title: 'Kowal',
     x: 26, z: 15.5, rotY: Math.PI,
-    rig: { skin: 0xb07850, shirt: 0x4a4a4a, pants: 0x3a2a1a, hair: 0x1a1a1a, cap: 0x555555 },
-    static: true,
+    rig: { skin: 0xb07850, shirt: 0x4a4a4a, pants: 0x3a2a1a, hair: 0x1a1a1a, cap: 0x555555, hammer: true },
+    static: true, work: 'smith',
   },
   {
     id: 'stablemaster', name: 'Hilda', title: 'Stajenna',
@@ -156,6 +156,8 @@ export class NPCManager {
       if (n.waveT > 0) {
         n.waveT -= dt;
         rig.setWave(t);
+      } else if (n.def.work === 'smith' && d > 4) {
+        rig.setWork(t); // kowal pracuje przy kowadle
       } else if (n.def.wander && d > 2.5) {
         // włóczęga
         const w = n.def.wander;
@@ -242,12 +244,20 @@ export function getDialogue(npcId, game) {
         opts.push(turnInOpt('q4_goblins', 'Znakomicie! Góry znów są bezpieczne. Karawany mogą ruszać. Weź to stalowe ostrze — zasłużyłeś. Ale to nie koniec… w Mrocznej Jaskini na zachodzie czai się coś gorszego.'));
       if (Q.canTurnIn('q5_crystal', 'king'))
         opts.push(turnInOpt('q5_crystal', 'KRYSZTAŁ KRÓLEWSKI! Wrócił do korony! Jesteś największym bohaterem królestwa, rycerzu!'));
+      if (Q.canTurnIn('q7_ruins', 'king'))
+        opts.push(turnInOpt('q7_ruins', 'Szkielety rozpadły się w proch! Ale to nie koniec… ich pan, Mroczny Rycerz, czeka na Szczycie Zguby. Tylko Ty możesz go pokonać!'));
+      if (Q.canTurnIn('q8_darkknight', 'king'))
+        opts.push(turnInOpt('q8_darkknight', 'MROCZNY RYCERZ POKONANY! Królestwo zawdzięcza Ci wszystko. Przyjmij Ostrze Rycerza — niech służy Ci w kolejnych legendach!'));
       if (st('q4_goblins') === 'available')
         opts.push(questOpt('q4_goblins', 'Gobliny z Gór Mglistych napadają na karawany. Pokonaj 6 goblinów i wróć z meldunkiem. Niech bogowie Cię prowadzą!'));
       if (st('q5_crystal') === 'available')
         opts.push(questOpt('q5_crystal', 'W Mrocznej Jaskini na zachodzie gnieździ się Kamienny Golem. Strzeże naszego Kryształu Królewskiego. Weź pochodnię — w środku jest ciemno jak w grobie. Powodzenia, bohaterze!'));
       if (st('q6_finale') === 'available')
         opts.push(questOpt('q6_finale', 'Chodź, chodź! Całe królestwo świętuje Twoje zwycięstwo!'));
+      if (st('q7_ruins') === 'available')
+        opts.push(questOpt('q7_ruins', 'W Zapomnianych Ruinach na południowym wschodzie powstały szkielety. Zniszcz 5 plugastw i wróć z meldunkiem. Weź ze sobą odwagę — i stal!'));
+      if (st('q8_darkknight') === 'available')
+        opts.push(questOpt('q8_darkknight', 'Mroczny Rycerz włada szkieletami ze Szczytu Zguby, najwyższej góry. Wejdź tam, pokonaj go i zakończ tę sagę raz na zawsze. Całe królestwo wierzy w Ciebie!'));
       if (st('q6_finale') === 'active') {
         return D('Rycerzu! Dzięki Tobie królestwo znów zaznało pokoju. Przyjmij tytuł BOHATERA KORONY oraz tę nagrodę. Twoje imię wyryjemy w złocie!', [
           { label: '👑 „Służę koronie!” (zakończ)', cls: 'gold-opt', fn: () => { Q.complete('q6_finale'); game.ui.closeDialogue(); } },
@@ -274,6 +284,10 @@ export function getDialogue(npcId, game) {
         opts.push(questOpt('q2_herbs', 'Do moich eliksirów potrzebuję 5 księżycowych ziół z Magicznego Lasu. Świecą na zielono — poznasz je z daleka. Uważaj na wilki… i wracaj cało, przyjacielu.'));
       if (Q.canTurnIn('q2_herbs', 'wizard'))
         opts.push(turnInOpt('q2_herbs', 'Wspaniale! Te zioła są idealne. Proszę — Amulet Ognia, wykuty w mojej wieży. Niech Cię chroni. Marta z rynku też prosiła o pomoc… wilki ośmieliły się za bardzo.'));
+      if (st('s4_herbs') === 'available')
+        opts.push(questOpt('s4_herbs', 'Zima tuż-tuż, a eliksirów mało. Przynieś mi 6 słonecznych ziół z południowych łąk — żółte kwiaty, nie sposób pomylić!'));
+      if (Q.canTurnIn('s4_herbs', 'wizard'))
+        opts.push(turnInOpt('s4_herbs', 'Znakomite zbiory! Kociołek już bulgocze. Trzymaj mikstury i złoto, przyjacielu!'));
       opts.push(tradeOpt('wizard'));
       opts.push({
         label: '✨ Bezpłatna mikstura za zioła (2x słoneczne ziele)',
@@ -354,6 +368,8 @@ export function getDialogue(npcId, game) {
       return D('Witaj w „Złotym Kuflu”! Głodny? Ranny? Zmęczony? U Berty znajdziesz wszystko — za drobną opłatą…', opts);
     }
     case 'merchant_aldona':
+      if (st('s6_letter') === 'done')
+        return D('Interesy idą świetnie… a Piotr znowu pisał! Och, nie powinnam o tym mówić. Może coś kupisz, swacie?', [tradeOpt('merchant_aldona'), byeOpt()]);
       return D('Mapy, pochodnie, liny i wytrychy! Wszystko, czego dusza podróżnika zapragnie. Bez mapy ani rusz w dzicz, mówię Ci!', [tradeOpt('merchant_aldona'), byeOpt()]);
     case 'merchant_boran':
       return D('Mikstury prosto od czarodzieja i prowiant od Berty! Ceny uczciwe, towar pierwsza klasa!', [tradeOpt('merchant_boran'), byeOpt()]);
@@ -382,11 +398,22 @@ export function getDialogue(npcId, game) {
         opts.push(questOpt('s2_sheep', 'Moja najlepsza owca, Białka, uciekła na łąkę na wschód od farmy! Znajdź ją i pogłaszcz, żeby wróciła. Poznasz ją po dzwoneczku!'));
       if (Q.canTurnIn('s2_sheep', 'farmer'))
         opts.push(turnInOpt('s2_sheep', 'Białka wróciła! Dziękuję Ci z całego serca. Trzymaj zapłatę, bohaterze wsi!'));
+      if (st('s5_boars') === 'available')
+        opts.push(questOpt('s5_boars', 'Dziki rozkopują mi pole! Upoluj 3 bestie w dziczy, a sowicie Cię wynagrodzę. Mięso też możesz zatrzymać!'));
+      if (Q.canTurnIn('s5_boars', 'farmer'))
+        opts.push(turnInOpt('s5_boars', 'Pole uratowane! Jesteś prawdziwym przyjacielem farmy. Trzymaj złoto i prowiant!'));
       opts.push(byeOpt());
       return D('Witaj na farmie! Ciężkie czasy… najpierw susza, potem wilki, a teraz jeszcze owca mi zwiała.', opts);
     }
-    case 'miller':
-      return D('Młyn miele, wiatr wieje… Życie płynie. Gdybyś szedł do lasu, uważaj na wilki — ostatnio wyły całą noc.', [byeOpt()]);
+    case 'miller': {
+      const opts = [];
+      if (st('s6_letter') === 'available')
+        opts.push(questOpt('s6_letter', 'Oto list… doręcz go Aldonie na rynku. I ani słowa nikomu, co w nim jest! To sprawa serca, rozumiesz…'));
+      opts.push(byeOpt());
+      return D(st('s6_letter') === 'active'
+        ? 'List musi trafić do Aldony! Nie czytaj go… no, może zerknij. Tylko jej nie mów!'
+        : 'Młyn miele, wiatr wieje… Życie płynie. Gdybyś szedł do lasu, uważaj na wilki — ostatnio wyły całą noc.', opts);
+    }
     default:
       return D('Witaj, podróżniku.', [byeOpt()]);
   }

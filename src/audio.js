@@ -93,6 +93,13 @@ export class AudioSys {
       case 'heal': [440, 554, 659].forEach((f, i) => this.tone(f, 0.35, 'sine', 0.2, null, i * 0.08)); break;
       case 'wolf': this.tone(280, 0.7, 'sawtooth', 0.14, 420); this.tone(350, 0.6, 'sawtooth', 0.1, 500, 0.15); break;
       case 'goblin': this.tone(500, 0.12, 'square', 0.14, 900); this.tone(700, 0.1, 'square', 0.12, 400, 0.1); break;
+      case 'skeleton': this.noise(0.09, 0.25, 2500, 'highpass'); this.noise(0.09, 0.25, 2000, 'highpass', 0.11); this.tone(180, 0.2, 'square', 0.1, 90, 0.05); break;
+      case 'roar': this.tone(70, 1.0, 'sawtooth', 0.4, 45); this.tone(105, 0.9, 'square', 0.25, 60, 0.05); this.noise(0.9, 0.3, 400); break;
+      case 'slam': this.noise(0.6, 0.6, 220); this.tone(60, 0.6, 'sine', 0.5, 28); break;
+      case 'charge': this.noise(0.5, 0.3, 800, 'bandpass'); this.tone(150, 0.5, 'sawtooth', 0.2, 500); break;
+      case 'summon': this.tone(880, 0.4, 'sine', 0.2, 220); this.tone(660, 0.5, 'sine', 0.2, 165, 0.1); this.noise(0.4, 0.15, 3000, 'highpass', 0.1); break;
+      case 'thunder': this.noise(1.4, 0.4, 180); this.tone(50, 1.2, 'sine', 0.35, 25, 0.1); break;
+      case 'cutscene': [392, 494, 587, 784].forEach((f, i) => this.tone(f, 0.5, 'sine', 0.18, null, i * 0.22)); break;
       case 'snore': this.noise(0.5, 0.1, 300); break;
       default: break;
     }

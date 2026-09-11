@@ -29,6 +29,8 @@ export const LOC = {
   farm: { x: -44, z: 176 },
   windmill: { x: 62, z: 196 },
   crossroads: { x: 0, z: 150 },
+  ruins: { x: 140, z: 240 },
+  arena: { x: 20, z: -248 },
 };
 
 export const QUALITY_PRESETS = {

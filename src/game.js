@@ -8,6 +8,8 @@ import { QuestManager } from './quests.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
 import { AudioSys } from './audio.js';
+import { CutsceneManager } from './cutscene.js';
+import { FXSystem } from './fx.js';
 import { makeTextures } from './textures.js';
 import { SAVE_KEY, QUALITY_PRESETS, detectQuality, LOC } from './config.js';
 import { ITEMS } from './items.js';
@@ -24,6 +26,9 @@ export class Game {
     this.fpsAcc = 0; this.fpsN = 0; this.fpsT = 0;
     this.hintCd = 0;
     this.chestLooted = { bed: false, goblin: false, cave: false };
+    this.cutsceneActive = false;
+    this.trauma = 0;
+    this._cutFlags = {};
   }
 
   async init(onProgress) {
@@ -64,6 +69,8 @@ export class Game {
 
     this.audio = new AudioSys();
     this.audio.isNightFn = () => this.world.isNight;
+    this.fx = new FXSystem(this.scene, this.quality);
+    this.cutscene = new CutsceneManager(this);
     this.ui = new UI(this);
     this.quests = new QuestManager(this);
     this.input = new Input();
@@ -117,6 +124,7 @@ export class Game {
     const q = QUALITY_PRESETS[name] || QUALITY_PRESETS.medium;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, q.pixelRatio));
     this.world.applyQuality(name);
+    if (this.fx) this.fx.setQuality(name);
     this.scene.fog.far = q.viewDistance + 200;
     this.camera.far = q.viewDistance + 700;
     this.camera.updateProjectionMatrix();
@@ -154,6 +162,7 @@ export class Game {
     this.ui.toast('🛡️ Witaj, rycerzu! Udaj się do króla na audiencję.', 'quest');
     this.ui.hint('WASD — ruch • mysz — kamera • E — rozmowa • I — ekwipunek', 8000);
     this.save();
+    setTimeout(() => { if (this.state === 'playing' && !this.cutsceneActive) this.cutscene.play('intro'); }, 800);
   }
 
   continueGame() {
@@ -201,6 +210,7 @@ export class Game {
   }
 
   togglePause() {
+    if (this.cutsceneActive) { this.cutscene.skip(); return; }
     if (this.state === 'playing') {
       if (this.ui.dialogOpen || !document.getElementById('inventory').classList.contains('hidden') ||
         !document.getElementById('quests-panel').classList.contains('hidden') ||
@@ -242,17 +252,22 @@ export class Game {
     this.save();
   }
 
-  onFinale() {
-    document.getElementById('finale-text').textContent =
-      `Król Aldric mianował Cię BOHATEREM KORONY! Królestwo jest bezpieczne dzięki Twojemu męstwu. ` +
-      `Zebrane złoto: ${this.player.gold}💰 • Poziom: ${this.player.level}. Przygoda trwa dalej — eksploruj świat!`;
+  onFinale(epic = false) {
+    document.getElementById('finale-text').textContent = epic
+      ? `MROCZNY RYCERZ POKONANY! Król Aldric mianował Cię LEGENDĄ KRÓLESTWA! ` +
+        `Ciemność pierzchła, a Twoje imię będą śpiewać bardowie przez pokolenia. ` +
+        `Zebrane złoto: ${this.player.gold}💰 • Poziom: ${this.player.level}. Przygoda trwa dalej — eksploruj świat!`
+      : `Król Aldric mianował Cię BOHATEREM KORONY! Królestwo jest bezpieczne dzięki Twojemu męstwu. ` +
+        `Zebrane złoto: ${this.player.gold}💰 • Poziom: ${this.player.level}. Przygoda trwa dalej — eksploruj świat!`;
     document.getElementById('finale-screen').classList.remove('hidden');
     this.audio.play('win');
     this.input.unlock();
   }
 
+  shake(amount = 0.3) { this.trauma = Math.min(1, (this.trauma || 0) + amount); }
+
   zoneName() {
-    const names = { kingdom: 'Królestwo', castle: 'Zamek Królewski', market: 'Rynek', tavern: 'Karczma „Złoty Kufel”', farm: 'Farma', forest: 'Magiczny Las', mountains: 'Góry Mgliste', cave: 'Mroczna Jaskinia', wild: 'Dzicz' };
+    const names = { kingdom: 'Królestwo', castle: 'Zamek Królewski', market: 'Rynek', tavern: 'Karczma „Złoty Kufel”', farm: 'Farma', forest: 'Magiczny Las', mountains: 'Góry Mgliste', cave: 'Mroczna Jaskinia', wild: 'Dzicz', ruins: 'Zapomniane Ruiny', arena: 'Szczyt Zguby' };
     return names[this.zone] || '';
   }
 
@@ -498,6 +513,13 @@ export class Game {
       if (z !== this.zone) {
         this.zone = z;
         this.ui.toast(`🧭 ${this.zoneName()}`);
+        if (z === 'ruins' && !this._cutFlags.ruins) { this._cutFlags.ruins = true; this.cutscene.play('ruins'); }
+        if (z === 'arena' && !this._cutFlags.boss) {
+          this._cutFlags.boss = true;
+          const bdk = this.creatures.darkKnight;
+          const anchor = bdk && !bdk.dead ? bdk.rig.group.position : new THREE.Vector3(LOC.arena.x, this.world.arenaY || 40, LOC.arena.z);
+          this.cutscene.play('boss', { anchor });
+        }
         if (z === 'cave' && !p.torchOn)
           this.ui.hint('Ciemno! Naciśnij T, aby zapalić pochodnię (kupisz ją na rynku).', 6000);
         if (z === 'forest') this.ui.hint('Magiczny Las — tu rosną księżycowe zioła i grasują wilki.', 5000);
@@ -508,10 +530,23 @@ export class Game {
       // NPC-e i stworzenia
       this.npcs.update(dt, this.t, p.group.position);
       this.creatures.update(dt, this.t, p, this);
-      // pociski
-      this.updateProjectiles(dt);
+      // efekty, cutscenki i wygaszanie wstrząsu kamery
+      this.fx.update(dt);
+      this.cutscene.update(dt);
+      this.trauma = Math.max(0, this.trauma - dt * 1.4);
+      // finałowa cutscenka po śmierci Mrocznego Rycerza
+      const dk = this.creatures.darkKnight;
+      if (dk && dk.dead && !this._cutFlags.finale && !this.cutsceneActive) {
+        this._cutFlags.finale = true;
+        const dp = dk.rig.group.position;
+        this.fx.flash(dp.x, dp.y + 1, dp.z, 0xffeeaa, 9);
+        this.fx.ring(dp.x, dp.y + 0.3, dp.z, 0xffcc55, 12);
+        this.cutscene.play('finale', { anchor: dp });
+      }
+      // pociski (zamrożone w czasie cutscenki)
+      if (!this.cutsceneActive) this.updateProjectiles(dt);
       // interakcje
-      if (!this.ui.dialogOpen && !this.input.uiOpen) {
+      if (!this.ui.dialogOpen && !this.input.uiOpen && !this.cutsceneActive) {
         const it = this.findInteract();
         this._interact = it;
         this.ui.prompt(it ? it.label : null);
