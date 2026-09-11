@@ -1,78 +1,59 @@
-# 🛡️ Dream Knight
+# 🛡️ Dream Knight — Dream Knight RPG
 
-**Dream Knight** to realistyczna gra RPG 3D w stylu fantasy z otwartym światem,
-działająca bezpośrednio w przeglądarce — na PC, tabletach i telefonach.
+**Dream Knight** to ultra realistyczna gra RPG fantasy z otwartym światem 3D,
+działająca w przeglądarce na **PC, tabletach i telefonach**. Grasz jako mężny rycerz,
+wykonujesz misje króla Aldrica, pomagasz mieszkańcom i eksplorujesz góry,
+magiczny las oraz mroczną jaskinię.
 
-Grasz jako rycerz Królestwa. Wykonujesz misje zlecone przez króla, pomagasz
-mieszkańcom, odwiedzasz rynek, kuźnię, stajnię, karczmę i dom czarodzieja,
-a poza murami eksplorujesz góry, magiczny las i jaskinię.
+Zero zewnętrznych assetów — cała grafika (tekstury, postacie, świat) jest generowana
+proceduralnie w Three.js, a dźwięki syntezowane w WebAudio.
 
----
-
-## ▶️ Uruchomienie (lokalnie)
+## ▶️ Uruchomienie
 
 ```bash
 npm install
 npm run dev
 ```
 
-Otwórz wskazany adres w przeglądarce (np. `http://localhost:5173`).
-
-Podgląd na żywo w Arena działa automatycznie po uruchomieniu `npm run dev`.
-
-Wersja produkcyjna:
+Otwórz adres z terminala (np. `http://localhost:5173`). Podgląd na żywo działa też w Arena.
 
 ```bash
-npm run build
-npm run preview
+npm run build    # wersja produkcyjna
+npm run preview  # podgląd buildu
 ```
-
----
 
 ## 🎮 Sterowanie
 
-### PC
-- `WASD` / strzałki — ruch
-- mysz — kamera (po kliknięciu w ekran gra włącza blokadę kursora)
-- lewy przycisk myszy — atak
-- `E` — interakcja (dialog / sklep / odpoczynek)
-- `I` — ekwipunek
-- `J` — zadania
-- `Shift` — bieg
-- `Esc` — menu / zamknięcie okna
+**PC:** WASD + mysz (kliknij ekran, by złapać kursor), LPM — atak, E — interakcja,
+Shift — bieg, Spacja — skok, I/J — ekwipunek/dziennik, F — kula ognia,
+R — mikstura, T — pochodnia, H — koń, Esc — pauza.
 
-### Mobile / tablety
-- Joystick po lewej — ruch
-- Obszar po prawej — kamera
-- przycisk ⚔️ — atak
-- przycisk 💬 — interakcja
-- 🎒 / 📜 / ☰ — ekwipunek, zadania, menu
+**Mobile:** joystick (lewy dół), przeciąganie po prawej (kamera), przyciski ⚔️/💬
+oraz 🎒 📜 ☰ i szybkie sloty (mikstura, ogień, pochodnia, koń).
 
----
+## 🗺️ Świat
 
-## 🧭 Świat
-
-- **Królestwo** — mury, rzeka, fort przy bramie, rynek z fontanną, domki,
-  karczma i zamek.
-- **Zamek** — sala tronowa z królem i pokój rycerza.
-- **Rynek** — stragany kupców, kuźnia, stajnia i wieża czarodzieja.
-- **Karczma** — prowiant i regeneracja zdrowia.
-- **Góry** — strome szczyty i stada goblinów.
-- **Magiczny las** — zioła, wilki, jelenie.
-- **Jaskinia** — ciemna grota z kryształami.
+- **Królestwo** — mury, fosa z mostem, fort przy bramie, rynek z fontanną, domki
+- **Zamek** — sala tronowa z królem + komnata rycerza (łóżko, skrzynia, sen do rana)
+- **Rynek** — stragany kupców, kuźnia, stajnia, wieża czarodzieja
+- **Karczma „Złoty Kufel”** — prowiant, mikstury, odpoczynek
+- **Góry Mgliste** — obóz goblinów, śnieg, sosny
+- **Magiczny Las** — świecące drzewa, zioła, wilki, jelenie, kamienny krąg, staw
+- **Mroczna Jaskinia** — kryształy i boss: Kamienny Golem
+- Farma, wiatrak, cykl dnia i nocy, dynamiczne cienie i pogoda świetlików
 
 ## ⚔️ Funkcje
 
-- Otwarty świat 3D z teksturami proceduralnymi, cieniami i światłem słonecznym
-- Dialogi i interakcje z mieszkańcami
-- Sklepy: kupiec, kowal, stajenny, czarodziej, karczmarz
-- System zadań (audiencja, zioła, pochodnia, patrol, wilki, meldunek)
-- Ekwipunek i wyposażenie (miecza, zbroja, amulet, mikstury, zaklęcia)
-- Przyjazne (jeleń, owca) i nieprzyjazne (goblin, wilk) stworzenia
-- Minimapa, licznik złota, paski zdrowia i energii
-- Adaptacyjna jakość grafiki zależnie od mocy urządzenia
-- Pełne sterowanie dotykowe na mobile bez dodatkowych aplikacji
+- Otwarty świat 3D: instancjonowana roślinność, cząsteczki, animowane flagi,
+  woda, dym, ogień, chmury, ptaki, gwiazdy
+- Dialogi i handel (6 sklepów), kuźnia, stajnia (kupno konia!), czarodziej
+- 6 zadań głównych + 3 poboczne, dziennik, śledzenie celu, minimapa
+- Ekwipunek: miecze, kusza, kostur, zbroje, amulety, mikstury, zaklęcia (kula ognia!)
+- Poziomy i doświadczenie, bossowie, łupy, skrzynie skarbów
+- Przyjazne (jelenie, owce, króliki, konie) i wrogie (wilki, gobliny, dziki, golem) stworzenia
+- Automatyczna jakość grafiki (niska → ultra) + auto-dostosowanie do FPS
+- Autozapis i kontynuacja przygody (localStorage)
+- Dźwięk proceduralny: efekty, wiatr, ptaki, świerszcze w nocy
 
 ---
-
-*Projekt: Dream Knight — Arena.ai Agent Mode*
+*Dream Knight v2.0 — zbudowano w Arena.ai Agent Mode (Three.js + Vite)*

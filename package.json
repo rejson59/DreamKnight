@@ -1,7 +1,7 @@
 {
   "name": "dream-knight",
-  "version": "1.0.0",
-  "description": "Dream Knight - realistyczna gra RPG fantasy w przeglądarce",
+  "version": "2.0.0",
+  "description": "Dream Knight - ultra realistyczna gra RPG fantasy z otwartym światem (Three.js)",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -9,7 +9,7 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "three": "^0.186.0"
+    "three": "^0.180.0"
   },
   "devDependencies": {
     "vite": "^7.0.0"
