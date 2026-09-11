@@ -495,7 +495,7 @@ export class World {
     const trimM = this.TM(this.T.stoneWall, 8, 1);
     const K = KINGDOM_HALF, H = 9, T = 3;
     const mkWall = (cx, cz, w, d) => {
-      const m = this.box(w, H, T, wallM, cx, H / 2, cz);
+      const m = this.box(w, H, d, wallM, cx, H / 2, cz);
       this.scene.add(m);
       // blanki
       const n = Math.floor(Math.max(w, d) / 2.2);
