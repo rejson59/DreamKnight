@@ -1858,38 +1858,159 @@ export class World {
       trunks.push({ x, y: h, z, s: rand(1, 1.8) });
       pines.push({ x, y: h, z, s: rand(1, 1.8), ph: 0 });
     }
-    const mkInst = (geo, m, list, yOff, shadow = true) => {
+    const tintCol = new THREE.Color();
+    const trunkTint = () => tintCol.setHSL(0.07 + Math.random() * 0.03, 0.35, 0.55 + Math.random() * 0.2);
+    const oakTint = () => (Math.random() < 0.12
+      ? tintCol.setHSL(0.1 + Math.random() * 0.05, 0.62, 0.55 + Math.random() * 0.1)
+      : tintCol.setHSL(0.25 + Math.random() * 0.07, 0.45, 0.5 + Math.random() * 0.2));
+    const pineTint = () => tintCol.setHSL(0.35 + Math.random() * 0.06, 0.35, 0.45 + Math.random() * 0.2);
+    const magicTint = () => tintCol.setHSL(0.5 + Math.random() * 0.08, 0.5, 0.6 + Math.random() * 0.25);
+    const bushTint = () => (Math.random() < 0.1
+      ? tintCol.setHSL(0.92 + Math.random() * 0.06, 0.45, 0.72)
+      : tintCol.setHSL(0.24 + Math.random() * 0.07, 0.5, 0.42 + Math.random() * 0.22));
+    const mkInst = (geo, m, list, yOff, shadow = true, sMul = 1, tint = null) => {
       const im = new THREE.InstancedMesh(geo, m, Math.max(1, list.length));
       list.forEach((p, i) => {
         dummy.position.set(p.x, p.y + yOff * p.s, p.z);
-        dummy.scale.setScalar(p.s);
-        dummy.rotation.y = (p.ph || 0) + i;
+        dummy.scale.setScalar(p.s * sMul);
+        dummy.rotation.set(0, (p.ph || 0) + i, 0);
         dummy.updateMatrix();
         im.setMatrixAt(i, dummy.matrix);
+        if (tint) im.setColorAt(i, tint(p, i));
       });
+      im.count = list.length;
       im.castShadow = shadow; im.receiveShadow = true;
       im.frustumCulled = false;
       im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
       this.scene.add(im);
       return im;
     };
     this.treeMeshes = [
-      mkInst(trunkG, trunkM, trunks, 2),
-      mkInst(oakG, oakM, oaks, 5.4),
-      mkInst(pineG, pineM, pines, 6),
-      mkInst(magicG, magicM, magics, 5.2),
+      mkInst(trunkG, trunkM, trunks, 2, true, 1, trunkTint),
+      mkInst(oakG, oakM, oaks, 5.4, true, 1, oakTint),
+      mkInst(pineG, pineM, pines, 6, true, 1, pineTint),
+      mkInst(magicG, magicM, magics, 5.2, true, 1, magicTint),
     ];
     this.treeCounts = [trunks.length, oaks.length, pines.length, magics.length];
     // Druga warstwa koron dębów (pełniejszy kształt)
     const oak2 = oaks.map((p) => ({ ...p, y: p.y + 1.6 * p.s, s: p.s * 0.7 }));
-    this.treeMeshes.push(mkInst(oakG, oakM, oak2, 5.4));
+    this.treeMeshes.push(mkInst(oakG, oakM, oak2, 5.4, true, 1, oakTint));
     this.treeCounts.push(oak2.length);
+    // Druga warstwa koron sosen (piętrowy pokrój)
+    const pineG2 = new THREE.ConeGeometry(1.55, 4.4, 8);
+    this.treeMeshes.push(mkInst(pineG2, pineM, pines, 8.4, true, 0.62, pineTint));
+    this.treeCounts.push(pines.length);
+
+    // Krzaki (instancje) — gęściej wokół lasu
+    const bushG = new THREE.IcosahedronGeometry(1, 1);
+    bushG.scale(1, 0.72, 1);
+    const bushM = this.windify(new THREE.MeshStandardMaterial({ map: this.T.leafOak, roughness: 1, alphaTest: 0.4, side: THREE.DoubleSide }), 0.18, 'bush');
+    const bushes = [];
+    guard = 0;
+    while (bushes.length < 650 && guard++ < 9000) {
+      const x = rand(-295, 295), z = rand(-295, 295);
+      if (!this.scatterOK(x, z)) continue;
+      const h = groundHeight(x, z);
+      if (h > 26) continue;
+      if (dist(x, z, LOC.forest.x, LOC.forest.z) > 130 && Math.random() < 0.5) continue;
+      bushes.push({ x, y: h, z, s: rand(0.5, 1.5), ph: rand(0, 9) });
+    }
+    this.treeMeshes.push(mkInst(bushG, bushM, bushes, 0.55, false, 1, bushTint));
+    this.treeCounts.push(bushes.length);
+
+    // Jagody na części krzaków
+    const berryG = new THREE.IcosahedronGeometry(0.09, 0);
+    const berryM = new THREE.MeshStandardMaterial({ roughness: 0.55 });
+    const berryCols = [0xd93a4e, 0x7a2bd9, 0x2b6bd9, 0xe07b2a];
+    const berries = [];
+    for (const b of bushes) {
+      if (Math.random() > 0.35) continue;
+      const n = 3 + ((Math.random() * 4) | 0);
+      for (let i = 0; i < n; i++) {
+        const a = rand(0, 6.28), rr = b.s * rand(0.5, 0.95);
+        berries.push({ x: b.x + Math.cos(a) * rr, y: b.y + b.s * rand(0.3, 0.9), z: b.z + Math.sin(a) * rr, s: rand(0.7, 1.3), ph: 0 });
+      }
+    }
+    if (berries.length) {
+      this.treeMeshes.push(mkInst(berryG, berryM, berries, 0, false, 1, () => tintCol.set(berryCols[(Math.random() * berryCols.length) | 0])));
+      this.treeCounts.push(berries.length);
+    }
+
+    // Paprocie w wilgotnych miejscach
+    const fernG = new THREE.ConeGeometry(0.7, 1.0, 7);
+    fernG.translate(0, 0.4, 0);
+    const fernM = this.windify(new THREE.MeshStandardMaterial({ map: this.T.leafPine, color: 0xa8e88e, roughness: 1, alphaTest: 0.4, side: THREE.DoubleSide }), 0.2, 'fern');
+    const ferns = [];
+    guard = 0;
+    while (ferns.length < 420 && guard++ < 7000) {
+      const x = rand(-290, 290), z = rand(-290, 290);
+      if (!this.scatterOK(x, z)) continue;
+      const h = groundHeight(x, z);
+      if (h < WATER_Y + 0.3 || h > 16) continue;
+      if (dist(x, z, LOC.forestPond.x, LOC.forestPond.z) > 40 && dist(x, z, LOC.forest.x, LOC.forest.z) > 125 && Math.random() < 0.7) continue;
+      ferns.push({ x, y: h, z, s: rand(0.6, 1.6), ph: rand(0, 9) });
+    }
+    this.treeMeshes.push(mkInst(fernG, fernM, ferns, 0, false));
+    this.treeCounts.push(ferns.length);
+
+    // Grzyby na skraju lasu
+    const shrooms = [];
+    guard = 0;
+    while (shrooms.length < 130 && guard++ < 4000) {
+      const a = rand(0, 6.28), r = 10 + Math.pow(Math.random(), 0.8) * 100;
+      const x = LOC.forest.x + Math.cos(a) * r, z = LOC.forest.z + Math.sin(a) * r * 0.85;
+      if (!this.scatterOK(x, z)) continue;
+      shrooms.push({ x, y: groundHeight(x, z), z, s: rand(0.6, 1.5), ph: rand(0, 9) });
+    }
+    const stemG = new THREE.CylinderGeometry(0.06, 0.09, 0.5, 6);
+    stemG.translate(0, 0.25, 0);
+    const capG = new THREE.SphereGeometry(0.24, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+    capG.translate(0, 0.42, 0);
+    const capCols = [0xc23b2e, 0x8a5a33, 0xb06a2a, 0x7a4a8a];
+    this.treeMeshes.push(mkInst(stemG, new THREE.MeshStandardMaterial({ color: 0xe8dcc2, roughness: 0.9 }), shrooms, 0, false));
+    this.treeCounts.push(shrooms.length);
+    this.treeMeshes.push(mkInst(capG, new THREE.MeshStandardMaterial({ roughness: 0.7 }), shrooms, 0, false, 1, () => tintCol.set(capCols[(Math.random() * capCols.length) | 0])));
+    this.treeCounts.push(shrooms.length);
+
+    // Trzciny nad leśnym stawem
+    const reedG = new THREE.CylinderGeometry(0.03, 0.06, 1.9, 5);
+    reedG.translate(0, 0.95, 0);
+    const reedM = this.windify(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 }), 0.22, 'reed');
+    const reeds = [];
+    guard = 0;
+    while (reeds.length < 220 && guard++ < 5000) {
+      const a = rand(0, 6.28), r = rand(8, 24);
+      const x = LOC.forestPond.x + Math.cos(a) * r, z = LOC.forestPond.z + Math.sin(a) * r;
+      if (Math.abs(x) > WORLD_HALF - 8 || Math.abs(z) > WORLD_HALF - 8) continue;
+      const h = groundHeight(x, z);
+      if (h < WATER_Y + 0.1 || h > WATER_Y + 2.2) continue;
+      reeds.push({ x, y: h - 0.15, z, s: rand(0.7, 1.4), ph: rand(0, 9) });
+    }
+    this.treeMeshes.push(mkInst(reedG, reedM, reeds, 0, false, 1, () => tintCol.setHSL(0.16 + Math.random() * 0.08, 0.42, 0.4 + Math.random() * 0.2)));
+    this.treeCounts.push(reeds.length);
+
+    // Powalone kłody
+    const logG = new THREE.CylinderGeometry(0.32, 0.4, 4.2, 8);
+    logG.rotateZ(Math.PI / 2);
+    const logs = [];
+    guard = 0;
+    while (logs.length < 26 && guard++ < 1500) {
+      const x = rand(-280, 280), z = rand(-280, 280);
+      if (!this.scatterOK(x, z, true)) continue;
+      const h = groundHeight(x, z);
+      if (h > 24) continue;
+      logs.push({ x, y: h + 0.3, z, s: rand(0.7, 1.3), ph: rand(0, 6.28) });
+      this.circ(x, z, 1.2);
+    }
+    this.treeMeshes.push(mkInst(logG, trunkM, logs, 0, true, 1, trunkTint));
+    this.treeCounts.push(logs.length);
 
     // Trawa (instancje)
     const grassG = new THREE.ConeGeometry(0.16, 0.7, 4);
     grassG.translate(0, 0.35, 0);
     const grassM = this.windify(new THREE.MeshStandardMaterial({ color: 0x66883c, roughness: 1 }), 0.16, 'grass');
-    const GN = 14000;
+    const GN = 17000;
     const grass = new THREE.InstancedMesh(grassG, grassM, GN);
     const col = new THREE.Color();
     let gi = 0; guard = 0;
@@ -1914,6 +2035,38 @@ export class World {
     this.scene.add(grass);
     this.grassMesh = grass;
     this.grassTotal = gi;
+
+    // Wysoka trawa łąkowa (kłosy) — kępy na żyznych nizinach
+    const tgG = new THREE.ConeGeometry(0.09, 1.25, 5);
+    tgG.translate(0, 0.62, 0);
+    const tgM = this.windify(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 }), 0.24, 'tgrass');
+    const TGN = 7000;
+    const tgrass = new THREE.InstancedMesh(tgG, tgM, TGN);
+    let tgi = 0; guard = 0;
+    while (tgi < TGN && guard++ < TGN * 4) {
+      const x = rand(-300, 300), z = rand(-300, 300);
+      if (!this.scatterOK(x, z)) continue;
+      const h = groundHeight(x, z);
+      if (h > 26) continue;
+      if (fbm(x * 0.02, z * 0.02) < 0.5 && Math.random() < 0.65) continue; // kępy
+      dummy.position.set(x, h, z);
+      dummy.scale.set(rand(0.8, 1.5), rand(0.8, 1.7), rand(0.8, 1.5));
+      dummy.rotation.set(0, rand(0, 6.28), 0);
+      dummy.updateMatrix();
+      tgrass.setMatrixAt(tgi, dummy.matrix);
+      if (Math.random() < 0.22) tgrass.setColorAt(tgi, col.setHSL(0.13, 0.5, 0.35 + Math.random() * 0.15));
+      else tgrass.setColorAt(tgi, col.setHSL(0.23 + Math.random() * 0.06, 0.5, 0.32 + Math.random() * 0.16));
+      tgi++;
+    }
+    tgrass.count = tgi;
+    tgrass.frustumCulled = false;
+    tgrass.instanceMatrix.needsUpdate = true;
+    if (tgrass.instanceColor) tgrass.instanceColor.needsUpdate = true;
+    tgrass.receiveShadow = true;
+    this.scene.add(tgrass);
+    this.grassMeshes = [grass, tgrass];
+    this.grassTotals = [gi, tgi];
+    this.grassShares = [1, 0.55];
 
     // Kwiaty
     const flG = new THREE.IcosahedronGeometry(0.12, 0);
@@ -2240,15 +2393,18 @@ export class World {
   applyQuality(name) {
     this.qualityName = name;
     const q = {
-      low: { grass: 1500, trees: 0.5, particles: 0.35, clouds: 3, shadow: 1024, extent: 60, rain: 150 },
-      medium: { grass: 7000, trees: 0.8, particles: 0.7, clouds: 7, shadow: 2048, extent: 95, rain: 350 },
-      high: { grass: 11000, trees: 1, particles: 1, clouds: 10, shadow: 2048, extent: 110, rain: 500 },
-      ultra: { grass: 14000, trees: 1, particles: 1.3, clouds: 14, shadow: 4096, extent: 130, rain: 500 },
+      low: { grass: 2500, trees: 0.5, particles: 0.35, clouds: 3, shadow: 1024, extent: 60, rain: 150 },
+      medium: { grass: 9000, trees: 0.8, particles: 0.7, clouds: 7, shadow: 2048, extent: 95, rain: 350 },
+      high: { grass: 13000, trees: 1, particles: 1, clouds: 10, shadow: 2048, extent: 110, rain: 500 },
+      ultra: { grass: 16000, trees: 1, particles: 1.3, clouds: 14, shadow: 4096, extent: 130, rain: 500 },
     }[name] || {};
     this.particleF = q.particles;
-    if (this.grassMesh) this.grassMesh.count = Math.min(this.grassTotal, q.grass);
+    const gMeshes = this.grassMeshes || (this.grassMesh ? [this.grassMesh] : []);
+    const gTotals = this.grassTotals || [this.grassTotal || 0];
+    const gShares = this.grassShares || [1];
+    gMeshes.forEach((g, i) => { g.count = Math.min(gTotals[i] || 0, ((q.grass || 0) * (gShares[i] ?? 1)) | 0); });
     if (this.treeMeshes) this.treeMeshes.forEach((m, i) => { m.count = Math.max(10, (this.treeCounts[i] * q.trees) | 0); });
-    this._grassBase = Math.min(this.grassTotal || 0, q.grass);
+    this._grassBase = gMeshes.map((g, i) => Math.min(gTotals[i] || 0, ((q.grass || 0) * (gShares[i] ?? 1)) | 0));
     this._treeBase = (this.treeCounts || []).map((c) => Math.max(10, (c * q.trees) | 0));
     if (this._vegScale) this.setVegScale(this._vegScale);
     if (this.sun) this.setShadow(q.extent, q.shadow);
@@ -2268,7 +2424,11 @@ export class World {
   // Gubernator FPS: płynne skalowanie gęstości roślinności (0.3..1)
   setVegScale(f) {
     this._vegScale = f;
-    if (this.grassMesh && this._grassBase) this.grassMesh.count = Math.max(300, (this._grassBase * f) | 0);
+    const gMeshes = this.grassMeshes || (this.grassMesh ? [this.grassMesh] : []);
+    gMeshes.forEach((g, i) => {
+      const b = (this._grassBase || [])[i];
+      if (b) g.count = Math.max(150, (b * f) | 0);
+    });
     if (this.treeMeshes && this._treeBase) this.treeMeshes.forEach((m, i) => { m.count = Math.max(10, (this._treeBase[i] * f) | 0); });
   }
 
