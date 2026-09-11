@@ -221,6 +221,11 @@ export class Game {
     this.input.uiOpen = false;
     document.getElementById('touch-controls').classList.toggle('hidden', !this.input.touchMode);
     document.getElementById('quick-slots').classList.toggle('hidden', !this.input.touchMode);
+    // Gdy użytkownik dotknie ekranu w trakcie gry — pokaż sterowanie dotykowe
+    this.input.onTouchMode = () => {
+      document.getElementById('touch-controls').classList.remove('hidden');
+      document.getElementById('quick-slots').classList.remove('hidden');
+    };
     this.clock = this.clock || new THREE.Clock();
     this.clock.getDelta();
     this.loop();

@@ -5,7 +5,12 @@ export class Input {
     this.lookDX = 0; this.lookDY = 0;
     this.attackQ = 0; this.interactQ = 0;
     this.joyX = 0; this.joyY = 0; this.joyOn = false;
-    this.touchMode = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    // touchMode = pokazuj sterowanie dotykowe. Start: tylko urządzenia z BAZOWYM
+    // wskaźnikiem dotykowym (laptopy z ekranem dotykowym startują w trybie myszy),
+    // potem dynamiczne przełączenie przy pierwszym dotknięciu ekranu.
+    this.touchMode = !!window.matchMedia?.('(pointer: coarse)').matches;
+    this.lastTouchT = -1e9; // znacznik ostatniego dotyku (filtruje syntetyczne kliknięcia myszy)
+    this.onTouchMode = null;
     this.locked = false;
     this.enabled = false; // false w menu/dialogach
     this.uiOpen = false;  // otwarty panel (inwentarz/sklep) blokuje ruch
@@ -18,6 +23,12 @@ export class Input {
   attach(canvas, els) {
     this.canvas = canvas;
     this.els = els;
+
+    // Pierwszy prawdziwy dotyk ekranu włącza UI dotykowe (laptopy z touchbarem też)
+    window.addEventListener('touchstart', () => {
+      this.lastTouchT = performance.now();
+      if (!this.touchMode) { this.touchMode = true; this.onTouchMode?.(); }
+    }, { passive: true, capture: true });
 
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -44,7 +55,7 @@ export class Input {
 
     // Mysz — pointer lock + atak
     canvas.addEventListener('click', () => {
-      if (!this.enabled || this.uiOpen || this.touchMode) return;
+      if (!this.enabled || this.uiOpen || performance.now() - this.lastTouchT < 1200) return;
       if (!this.locked) canvas.requestPointerLock?.();
     });
     document.addEventListener('pointerlockchange', () => {
@@ -60,7 +71,7 @@ export class Input {
       }
     });
     canvas.addEventListener('mousedown', (e) => {
-      if (!this.enabled || this.uiOpen || this.touchMode) return;
+      if (!this.enabled || this.uiOpen || performance.now() - this.lastTouchT < 1200) return;
       if (e.button === 0) {
         if (this.locked) this.attackQ++;
         else canvas.requestPointerLock?.();
@@ -142,6 +153,9 @@ export class Input {
 
     els.btnAttack?.addEventListener('touchstart', (e) => { if (this.enabled && !this.uiOpen) this.attackQ++; e.preventDefault(); }, { passive: false });
     els.btnInteract?.addEventListener('touchstart', (e) => { if (this.enabled && !this.uiOpen) this.interactQ++; e.preventDefault(); }, { passive: false });
+    // ...i myszą (gdy UI dotykowe jest widoczne na urządzeniu z myszą)
+    els.btnAttack?.addEventListener('click', () => { if (this.enabled && !this.uiOpen) this.attackQ++; });
+    els.btnInteract?.addEventListener('click', () => { if (this.enabled && !this.uiOpen) this.interactQ++; });
   }
 
   isDown(code) { return this.keys.has(code); }
