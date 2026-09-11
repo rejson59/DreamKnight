@@ -2,6 +2,7 @@
 import { ITEMS, SHOPS } from './items.js';
 import { QUESTS } from './quests.js';
 import { ZONE_NAMES, WORLD_SIZE } from './config.js';
+import { icon, hydrateIcons } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -11,10 +12,13 @@ export class UI {
     this.shopId = null;
     this.dialogOpen = false;
     this.mapStatic = null;
+    this.mapHidden = false;
     this.lastHp = -1; this.lastStam = -1; this.lastXp = -1; this.lastGold = -1;
+    this.lastPhase = '';
   }
 
   init() {
+    hydrateIcons();
     // przyciski HUD
     $('btn-inventory').onclick = () => { this.game.audio.play('click'); this.toggleInventory(); };
     $('btn-quests').onclick = () => { this.game.audio.play('click'); this.toggleQuests(); };
@@ -27,7 +31,7 @@ export class UI {
     $('btn-mute').onclick = () => {
       const a = this.game.audio;
       a.setMuted(!a.muted);
-      $('btn-mute').textContent = a.muted ? '🔇 Dźwięk: wyciszony' : '🔊 Dźwięk: włączony';
+      this.renderMute();
     };
     $('btn-pause-help').onclick = () => { $('help-screen').classList.remove('hidden'); };
     $('btn-quit').onclick = () => this.game.quitToMenu();
@@ -39,7 +43,32 @@ export class UI {
     $('btn-horse').onclick = () => this.game.player.mount(this.game);
     $('cut-skip').onclick = () => this.game.cutscene.skip();
     $('quality2').onchange = (e) => this.game.setQuality(e.target.value);
-    if (this.game.audio.muted) $('btn-mute').textContent = '🔇 Dźwięk: wyciszony';
+    this.renderMute();
+    // zwijanie trackera i mapy
+    $('tracker-toggle').onclick = (e) => {
+      e.stopPropagation();
+      this.game.audio.play('click');
+      const t = $('quest-tracker');
+      if (innerWidth <= 760) {
+        t.classList.toggle('expanded');
+        $('tracker-toggle').textContent = t.classList.contains('expanded') ? '–' : '+';
+      } else {
+        t.classList.toggle('collapsed');
+        $('tracker-toggle').textContent = t.classList.contains('collapsed') ? '+' : '–';
+      }
+    };
+    $('map-toggle').onclick = () => {
+      this.game.audio.play('click');
+      this.mapHidden = !this.mapHidden;
+      $('minimap-wrap').classList.toggle('map-hidden', this.mapHidden);
+      $('map-toggle').textContent = this.mapHidden ? '+' : '–';
+    };
+  }
+
+  renderMute() {
+    const m = this.game.audio.muted;
+    $('mute-ic').innerHTML = icon(m ? 'mute' : 'sound', 18);
+    $('mute-label').textContent = m ? 'Dźwięk: wyciszony' : 'Dźwięk: włączony';
   }
 
   // ---------- EKRANY ----------
@@ -69,13 +98,15 @@ export class UI {
     if (Math.abs(stPct - this.lastStam) > 0.5) { $('stam-fill').style.width = `${stPct}%`; this.lastStam = stPct; }
     const xpPct = (p.xp / p.xpNext) * 100;
     if (Math.abs(xpPct - this.lastXp) > 0.5) { $('xp-fill').style.width = `${xpPct}%`; this.lastXp = xpPct; }
-    if (p.gold !== this.lastGold) { $('gold').textContent = `💰 ${p.gold}`; this.lastGold = p.gold; }
-    $('level-badge').textContent = `Poziom ${p.level} • ⚔️${p.atk} 🛡️${p.def}`;
+    if (p.gold !== this.lastGold) { $('gold-num').textContent = p.gold; this.lastGold = p.gold; }
+    $('level-num').textContent = `POZIOM ${p.level}`;
+    $('level-stats').textContent = `ATAK ${p.atk} · OBR ${p.def}`;
     // zegar
     const dayT = this.game.world.dayT;
     const hrs = Math.floor(((dayT + 0.25) % 1) * 24);
-    const icon = this.game.world.isNight ? '🌙' : hrs < 10 || hrs > 17 ? '🌅' : '☀️';
-    $('clock').textContent = `${icon} ${hrs}:00`;
+    const phase = this.game.world.isNight ? 'moon' : 'sun';
+    if (phase !== this.lastPhase) { $('clock-ic').innerHTML = icon(phase, 15); this.lastPhase = phase; }
+    $('clock-num').textContent = `${hrs}:00`;
     // cel zadania
     this.updateTracker();
     // broń dystansowa — celownik
@@ -87,22 +118,43 @@ export class UI {
     $('btn-horse').classList.toggle('off', !p.inv.hasHorse);
     // strefa
     $('zone-label').textContent = ZONE_NAMES[this.game.zone] || '';
-    this.drawMinimap();
+    if (!this.mapHidden) this.drawMinimap();
   }
 
   updateTracker() {
     const qm = this.game.quests;
     const id = qm.tracked;
-    if (!id || qm.state[id].status === 'done') { $('quest-tracker').classList.add('hidden'); return; }
-    $('quest-tracker').classList.remove('hidden');
-    $('tracker-title').textContent = `📜 ${QUESTS[id].name}`;
-    $('tracker-text').textContent = qm.progressText(id);
+    const b = this.game.bounty;
+    if (id && qm.state[id].status !== 'done') {
+      $('quest-tracker').classList.remove('hidden');
+      $('tracker-name').textContent = QUESTS[id].name;
+      $('tracker-text').textContent = qm.progressText(id);
+    } else if (b) {
+      $('quest-tracker').classList.remove('hidden');
+      $('tracker-name').textContent = `Zlecenie: ${b.name}`;
+      $('tracker-text').textContent = b.count >= b.need ? 'Wróć do tablicy po nagrodę!' : `${b.count} / ${b.need}`;
+    } else {
+      $('quest-tracker').classList.add('hidden');
+    }
+  }
+
+  zoneBanner(name) {
+    const el = $('zone-banner');
+    $('zone-banner-text').textContent = name;
+    el.classList.remove('hidden');
+    requestAnimationFrame(() => el.classList.add('show'));
+    clearTimeout(this._zoneT);
+    this._zoneT = setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.classList.add('hidden'), 650);
+    }, 2400);
   }
 
   prompt(text, key = 'E') {
     if (!text) { $('interact-prompt').classList.add('hidden'); return; }
     $('interact-prompt').classList.remove('hidden');
-    $('interact-key').textContent = this.game.input.touchMode ? '💬' : key;
+    $('interact-key').style.display = this.game.input.touchMode ? 'none' : '';
+    $('interact-key').textContent = key;
     $('interact-text').textContent = text;
   }
 
@@ -117,8 +169,12 @@ export class UI {
 
   hitMarker() {
     const el = $('combo-hint');
-    el.textContent = '💥';
+    el.classList.remove('combo-big');
+    el.textContent = '✦';
     el.classList.remove('hidden');
+    el.classList.remove('hit-pop');
+    void el.offsetWidth;
+    el.classList.add('hit-pop');
     clearTimeout(this._hitT);
     this._hitT = setTimeout(() => el.classList.add('hidden'), 180);
   }
@@ -142,7 +198,7 @@ export class UI {
 
   showBoss(name, frac) {
     $('boss-bar').classList.remove('hidden');
-    $('boss-name').textContent = `💀 ${name}`;
+    $('boss-name').innerHTML = `${icon('skull', 17)}<span>${name}</span>`;
     $('boss-fill').style.width = `${Math.max(0, frac * 100)}%`;
   }
   hideBoss() { $('boss-bar').classList.add('hidden'); }
@@ -165,6 +221,7 @@ export class UI {
 
   comboHit(text) {
     const el = $('combo-hint');
+    el.classList.remove('hit-pop');
     el.textContent = text;
     el.classList.remove('hidden');
     el.classList.add('combo-big');
@@ -231,7 +288,7 @@ export class UI {
     const p = this.game.player;
     $('shop-title').textContent = shop.name;
     $('shop-desc').textContent = shop.desc;
-    $('shop-gold').textContent = `💰 Twoje złoto: ${p.gold}`;
+    $('shop-gold').innerHTML = `${icon('coin', 18)}<span>Twoje złoto: ${p.gold}</span>`;
     const list = $('shop-list');
     list.innerHTML = '';
     for (const id of shop.items) {
@@ -239,9 +296,9 @@ export class UI {
       const owned = it.unique && p.inv.count(id) > 0;
       const row = document.createElement('div');
       row.className = 'shop-item';
-      row.innerHTML = `<div class="icon">${it.icon}</div>
+      row.innerHTML = `<div class="icon t-${it.type}">${icon(it.icon, 30)}</div>
         <div class="info"><div class="name">${it.name}</div><div class="desc">${it.desc}</div></div>
-        <div class="price">${owned ? '✓' : it.price + '💰'}</div>`;
+        <div class="price">${owned ? '✓' : it.price + ' zł'}</div>`;
       const btn = document.createElement('button');
       btn.className = 'btn primary';
       btn.textContent = owned ? 'Masz' : 'Kup';
@@ -252,10 +309,10 @@ export class UI {
         p.inv.add(id);
         if (it.spell) {
           p.inv.learnSpell(it.spell);
-          this.toast(`✨ Nauczono: ${it.spell === 'fireball' ? 'Kula Ognia (F)' : 'Leczenie'}!`, 'quest');
+          this.toast(`Nauczono: ${it.spell === 'fireball' ? 'Kula Ognia (F)' : 'Leczenie'}!`, 'quest');
         }
         this.game.audio.play('coin');
-        this.toast(`🛒 Kupiono: ${it.name}`);
+        this.toast(`Kupiono: ${it.name}`);
         this.game.save();
         this.renderShop();
       };
@@ -269,10 +326,10 @@ export class UI {
         if (!n) continue;
         const row = document.createElement('div');
         row.className = 'shop-item';
-        row.innerHTML = `<div class="icon">${ITEMS[sid].icon}</div>
+        row.innerHTML = `<div class="icon t-${ITEMS[sid].type}">${icon(ITEMS[sid].icon, 30)}</div>
           <div class="info"><div class="name">Sprzedaj: ${label} (${n}x)</div>
-          <div class="desc">Skup po ${ITEMS[sid].price}💰 za sztukę</div></div>
-          <div class="price">+${n * ITEMS[sid].price}💰</div>`;
+          <div class="desc">Skup po ${ITEMS[sid].price} zł za sztukę</div></div>
+          <div class="price">+${n * ITEMS[sid].price} zł</div>`;
         const btn = document.createElement('button');
         btn.className = 'btn gold';
         btn.textContent = 'Sprzedaj';
@@ -301,16 +358,16 @@ export class UI {
     const p = this.game.player;
     const b = p.inv.bonus();
     $('inv-stats').innerHTML =
-      `❤️ <b>${Math.ceil(p.hp)}/${p.maxHpTotal}</b> &nbsp; ⚔️ <b>${p.atk}</b> &nbsp; 🛡️ <b>${p.def}</b> &nbsp; 💰 <b>${p.gold}</b> &nbsp; ⭐ <b>Pz ${p.level}</b>` +
-      (p.inv.spells.length ? `<br/>✨ Zaklęcia: <b>${p.inv.spells.map((s) => s === 'fireball' ? 'Kula Ognia (F)' : 'Leczenie').join(', ')}</b>` : '');
+      `Zdrowie <b>${Math.ceil(p.hp)}/${p.maxHpTotal}</b> &nbsp; Atak <b>${p.atk}</b> &nbsp; Obrona <b>${p.def}</b> &nbsp; Złoto <b>${p.gold}</b> &nbsp; Poziom <b>${p.level}</b>` +
+      (p.inv.spells.length ? `<br/>Zaklęcia: <b>${p.inv.spells.map((s) => s === 'fireball' ? 'Kula Ognia (F)' : 'Leczenie').join(', ')}</b>` : '');
     // sloty
     const slots = $('equip-slots');
     slots.innerHTML = '';
-    for (const [slot, label] of [['weapon', '⚔️ Broń'], ['armor', '🛡️ Zbroja'], ['amulet', '📿 Amulet']]) {
+    for (const [slot, label] of [['weapon', 'Broń'], ['armor', 'Zbroja'], ['amulet', 'Amulet']]) {
       const id = p.inv.equipped(slot);
       const d = document.createElement('div');
       d.className = 'equip-slot' + (id ? ' filled' : '');
-      d.innerHTML = `<div class="slot-name">${label}</div>${id ? ITEMS[id].icon + ' ' + ITEMS[id].name : '<i>puste</i>'}`;
+      d.innerHTML = `<div class="slot-name">${label}</div>${id ? `<div class="eq-item t-${ITEMS[id].type}">${icon(ITEMS[id].icon, 20)}<span>${ITEMS[id].name}</span></div>` : '<i>puste</i>'}`;
       if (id) d.onclick = () => { p.inv.unequip(slot); this.game.audio.play('click'); p.updateWeaponMesh(); this.renderInventory(); };
       slots.appendChild(d);
     }
@@ -326,7 +383,7 @@ export class UI {
       const d = document.createElement('div');
       d.className = 'inv-item';
       d.title = it.desc;
-      d.innerHTML = `<div class="icon">${it.icon}</div><div class="name">${it.name}</div>${n > 1 ? `<div class="count">${n}</div>` : ''}`;
+      d.innerHTML = `<div class="icon t-${it.type}">${icon(it.icon, 28)}</div><div class="name">${it.name}</div>${n > 1 ? `<div class="count">${n}</div>` : ''}`;
       d.onclick = () => this.useItem(id);
       grid.appendChild(d);
     }
@@ -341,17 +398,17 @@ export class UI {
       else p.inv.equip(id);
       p.updateWeaponMesh();
       this.game.audio.play('click');
-      this.toast(`${it.icon} ${p.inv.equipped(it.type) === id ? 'Założono' : 'Zdjęto'}: ${it.name}`);
+      this.toast(`${p.inv.equipped(it.type) === id ? 'Założono' : 'Zdjęto'}: ${it.name}`);
     } else if (it.type === 'consumable') {
       if (p.hp >= p.maxHpTotal) { this.toast('Masz pełne zdrowie.', 'bad'); return; }
       p.inv.remove(id);
       p.heal(it.heal);
       this.game.audio.play(it.use === 'eat' ? 'eat' : 'potion');
-      this.toast(`${it.icon} +${it.heal} HP`, 'gold');
+      this.toast(`+${it.heal} HP`, 'gold');
     } else if (it.type === 'spell') {
       if (!p.inv.spells.includes(it.spell)) {
         p.inv.learnSpell(it.spell);
-        this.toast(`✨ Nauczono zaklęcia!`, 'quest');
+        this.toast(`Nauczono zaklęcia!`, 'quest');
         this.game.audio.play('quest');
       }
     } else if (id === 'torch') {
@@ -386,17 +443,17 @@ export class UI {
       const d = document.createElement('div');
       d.className = `quest-card ${q.type}${s.status === 'done' ? ' done' : ''}`;
       const rw = [];
-      if (q.reward.gold) rw.push(`${q.reward.gold}💰`);
+      if (q.reward.gold) rw.push(`${q.reward.gold} zł`);
       if (q.reward.xp) rw.push(`${q.reward.xp} PD`);
       for (const it of q.reward.items || []) rw.push(ITEMS[it]?.name || it);
-      d.innerHTML = `<div class="qname">${q.type === 'main' ? '👑' : '🌿'} ${q.name}</div>
+      d.innerHTML = `<div class="qname">${icon(q.type === 'main' ? 'crown' : 'herb', 17)}<span>${q.name}</span></div>
         <div class="qdesc">${q.desc}</div>
         <div class="qobj">➤ ${qm.progressText(id)}</div>
         <div class="qreward">Nagroda: ${rw.join(' • ')}</div>`;
       d.onclick = () => {
         if (s.status !== 'done') {
           qm.tracked = id;
-          this.toast(`📍 Śledzone: ${q.name}`);
+          this.toast(`Śledzone: ${q.name}`);
           this.game.audio.play('click');
           this.renderQuests();
         }
@@ -416,53 +473,74 @@ export class UI {
 
   // ---------- MINIMAPA ----------
   buildStaticMap() {
+    const cv = $('minimap');
+    const S = cv ? cv.width : 150;
     const c = document.createElement('canvas');
-    c.width = c.height = 188;
+    c.width = c.height = S;
     const x = c.getContext('2d');
     const W = WORLD_SIZE;
-    const px = (wx) => ((wx + W / 2) / W) * 188;
+    const px = (wx) => ((wx + W / 2) / W) * S;
     // tło
-    x.fillStyle = '#223a1e'; x.fillRect(0, 0, 188, 188);
+    x.fillStyle = '#223a1e'; x.fillRect(0, 0, S, S);
     // góry
     x.fillStyle = '#6a6a75';
-    x.fillRect(0, 0, 188, px(-125) - 0);
+    x.fillRect(0, 0, S, px(-125) - 0);
     // las
     x.fillStyle = '#1d4a3a';
-    x.beginPath(); x.ellipse(px(190), px(40), 34, 30, 0, 0, 7); x.fill();
+    x.beginPath(); x.ellipse(px(190), px(40), 30, 26, 0, 0, 7); x.fill();
     // staw
     x.fillStyle = '#2a7a9a';
-    x.beginPath(); x.arc(px(208), px(96), 6, 0, 7); x.fill();
+    x.beginPath(); x.arc(px(208), px(96), 5, 0, 7); x.fill();
     // fosa
-    x.strokeStyle = '#2a7a9a'; x.lineWidth = 7;
+    x.strokeStyle = '#2a7a9a'; x.lineWidth = 6;
     x.strokeRect(px(-97), px(-97), px(97) - px(-97), px(97) - px(-97));
     // mury
-    x.strokeStyle = '#8a8a95'; x.lineWidth = 3;
+    x.strokeStyle = '#8a8a95'; x.lineWidth = 2.5;
     x.strokeRect(px(-80), px(-80), px(80) - px(-80), px(80) - px(-80));
     // rynek
     x.fillStyle = '#9a9aa5';
-    x.beginPath(); x.arc(px(0), px(5), 8, 0, 7); x.fill();
+    x.beginPath(); x.arc(px(0), px(5), 7, 0, 7); x.fill();
     // zamek
     x.fillStyle = '#c9a83c';
     x.fillRect(px(-14), px(-66), px(16) - px(-14), px(-38) - px(-66));
-    // drogi
+    // ulica miejska
+    x.strokeStyle = '#8a8a95'; x.lineWidth = 1.5;
+    x.beginPath(); x.moveTo(px(0), px(-38)); x.lineTo(px(0), px(86)); x.stroke();
+    // drogi (zgodne ze ścieżkami 3D)
     x.strokeStyle = '#7a6242'; x.lineWidth = 2;
-    x.beginPath(); x.moveTo(px(0), px(107)); x.lineTo(px(0), px(310)); x.stroke();
-    x.beginPath(); x.moveTo(px(-230), px(160)); x.lineTo(px(230), px(160)); x.stroke();
-    x.beginPath(); x.moveTo(px(40), px(160)); x.lineTo(px(40), px(-220)); x.stroke();
-    x.beginPath(); x.moveTo(px(-168), px(160)); x.lineTo(px(-168), px(60)); x.stroke();
-    x.beginPath(); x.moveTo(px(190), px(160)); x.lineTo(px(190), px(45)); x.stroke();
+    const road = (pts) => {
+      x.beginPath();
+      pts.forEach(([wx, wz], i) => { if (i === 0) x.moveTo(px(wx), px(wz)); else x.lineTo(px(wx), px(wz)); });
+      x.stroke();
+    };
+    road([[0, 107], [0, 160]]);                                    // na południe
+    road([[0, 160], [-168, 160], [-168, 64]]);                     // do jaskini
+    road([[0, 160], [190, 160], [190, 48]]);                       // do lasu
+    road([[0, 160], [-40, 166]]);                                  // farma
+    road([[-40, 166], [58, 188]]);                                 // młyn
+    road([[58, 188], [100, 192], [140, 196], [140, 238]]);          // ruiny
+    road([[190, 140], [150, 80], [140, 0], [120, -70], [95, -140], [60, -185], [42, -203]]); // szlak północny
+    road([[40, -205], [30, -226], [20, -244]]);                     // szczyt zguby
     // jaskinia
     x.fillStyle = '#3a3a44';
-    x.beginPath(); x.arc(px(-196), px(62), 7, 0, 7); x.fill();
+    x.beginPath(); x.arc(px(-196), px(62), 6, 0, 7); x.fill();
     // obóz goblinów
     x.fillStyle = '#7a3a1e';
-    x.beginPath(); x.arc(px(40), px(-205), 5, 0, 7); x.fill();
+    x.beginPath(); x.arc(px(40), px(-205), 4, 0, 7); x.fill();
+    // farma i młyn
+    x.fillStyle = '#7ac17a';
+    x.beginPath(); x.arc(px(-44), px(176), 4, 0, 7); x.fill();
+    x.fillStyle = '#c9a83c';
+    x.beginPath(); x.arc(px(62), px(196), 4, 0, 7); x.fill();
+    // tablica zleceń
+    x.fillStyle = '#ffd75e';
+    x.beginPath(); x.arc(px(-6), px(24), 2.5, 0, 7); x.fill();
     // Zapomniane Ruiny
     x.fillStyle = '#8a4adf';
-    x.beginPath(); x.arc(px(140), px(240), 6, 0, 7); x.fill();
+    x.beginPath(); x.arc(px(140), px(240), 5, 0, 7); x.fill();
     // Szczyt Zguby (arena bossa)
     x.fillStyle = '#e02020';
-    x.beginPath(); x.arc(px(20), px(-248), 6, 0, 7); x.fill();
+    x.beginPath(); x.arc(px(20), px(-248), 5, 0, 7); x.fill();
     this.mapStatic = c;
   }
 
@@ -471,7 +549,7 @@ export class UI {
     if (!cv || !this.game.player) return;
     if (!this.mapStatic) this.buildStaticMap();
     const x = cv.getContext('2d');
-    const S = 188, W = WORLD_SIZE;
+    const S = cv.width, W = WORLD_SIZE;
     const px = (wx) => ((wx + W / 2) / W) * S;
     x.clearRect(0, 0, S, S);
     x.save();
@@ -486,21 +564,21 @@ export class UI {
     // NPC-e
     for (const n of this.game.npcs.npcs) {
       const m = this.game.quests.markerFor(n.id);
-      dot(n.rig.group.position.x, n.rig.group.position.z, m === '?' ? '#8fd18f' : m === '!' ? '#ffd75e' : '#c9bfa8', m ? 4 : 2.5);
+      dot(n.rig.group.position.x, n.rig.group.position.z, m === '?' ? '#8fd18f' : m === '!' ? '#ffd75e' : '#c9bfa8', m ? 3.5 : 2);
     }
     // wrogowie w pobliżu
     for (const e of this.game.creatures.enemies) {
       if (e.dead) continue;
       const d = Math.hypot(e.rig.group.position.x - p.group.position.x, e.rig.group.position.z - p.group.position.z);
-      if (d < 60 || hasMap) dot(e.rig.group.position.x, e.rig.group.position.z, e.boss ? '#ff2222' : '#ff6b5e', e.boss ? 5 : 3);
+      if (d < 60 || hasMap) dot(e.rig.group.position.x, e.rig.group.position.z, e.boss ? '#ff2222' : '#ff6b5e', e.boss ? 4.5 : 2.5);
     }
     // koń
     const h = this.game.creatures.playerHorse;
-    if (h) dot(h.rig.group.position.x, h.rig.group.position.z, '#a06a2a', 3);
+    if (h) dot(h.rig.group.position.x, h.rig.group.position.z, '#a06a2a', 2.5);
     // zaginiona owca
     const ls = this.game.creatures.lostSheep;
     if (ls && !ls.dead && this.game.quests.state.s2_sheep.status === 'active')
-      dot(ls.rig.group.position.x, ls.rig.group.position.z, '#ffffff', 4);
+      dot(ls.rig.group.position.x, ls.rig.group.position.z, '#ffffff', 3.5);
     // cel zadania — pulsujący znacznik
     const t = performance.now() / 400;
     const pulse = 3 + Math.sin(t) * 1.5;

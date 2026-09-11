@@ -213,7 +213,7 @@ export function getDialogue(npcId, game) {
   const D = (text, options) => ({ text, options });
   const bye = { label: 'Żegnaj.', fn: () => game.ui.closeDialogue() };
   const questOpt = (qid, acceptText) => ({
-    label: `📜 ${QUESTS[qid].name} — przyjmij zadanie`, cls: 'gold-opt',
+    label: `${QUESTS[qid].name} — przyjmij zadanie`, cls: 'gold-opt',
     fn: () => {
       Q.accept(qid);
       game.ui.showDialogue(game.npcs.getById(npcId).def.name, acceptText, [byeOpt()]);
@@ -221,14 +221,14 @@ export function getDialogue(npcId, game) {
   });
   const byeOpt = () => ({ ...bye });
   const turnInOpt = (qid, thanksText) => ({
-    label: `🏆 ${QUESTS[qid].name} — odbierz nagrodę`, cls: 'gold-opt',
+    label: `${QUESTS[qid].name} — odbierz nagrodę`, cls: 'gold-opt',
     fn: () => {
       Q.turnIn(qid);
       game.ui.showDialogue(game.npcs.getById(npcId).def.name, thanksText, [byeOpt()]);
     },
   });
   const tradeOpt = (shopId) => ({
-    label: `🛒 Handel (${SHOPS[shopId].name})`,
+    label: `Handel (${SHOPS[shopId].name})`,
     fn: () => game.ui.openShop(shopId),
   });
 
@@ -237,7 +237,7 @@ export function getDialogue(npcId, game) {
       const opts = [];
       if (st('q1_audience') === 'available' || st('q1_audience') === 'active') {
         return D('Ach, mój wierny rycerzu! Gobliny, wilki i mroczne siły zagrażają królestwu. Potrzebuję Twojego miecza. Najpierw odwiedź mędrca Eldrina w wieży na rynku — on wskaże Ci drogę. A teraz — ruszaj i okryj się chwałą!', [
-          { label: '⚔️ „Tak jest, mój królu!” (rozpocznij misje)', cls: 'gold-opt', fn: () => { Q.accept('q1_audience'); Q.onTalk('king'); game.ui.closeDialogue(); } },
+          { label: '„Tak jest, mój królu!” (rozpocznij misje)', cls: 'gold-opt', fn: () => { Q.accept('q1_audience'); Q.onTalk('king'); game.ui.closeDialogue(); } },
         ]);
       }
       if (Q.canTurnIn('q4_goblins', 'king'))
@@ -260,18 +260,18 @@ export function getDialogue(npcId, game) {
         opts.push(questOpt('q8_darkknight', 'Mroczny Rycerz włada szkieletami ze Szczytu Zguby, najwyższej góry. Wejdź tam, pokonaj go i zakończ tę sagę raz na zawsze. Całe królestwo wierzy w Ciebie!'));
       if (st('q6_finale') === 'active') {
         return D('Rycerzu! Dzięki Tobie królestwo znów zaznało pokoju. Przyjmij tytuł BOHATERA KORONY oraz tę nagrodę. Twoje imię wyryjemy w złocie!', [
-          { label: '👑 „Służę koronie!” (zakończ)', cls: 'gold-opt', fn: () => { Q.complete('q6_finale'); game.ui.closeDialogue(); } },
+          { label: '„Służę koronie!” (zakończ)', cls: 'gold-opt', fn: () => { Q.complete('q6_finale'); game.ui.closeDialogue(); } },
         ]);
       }
       opts.push({
-        label: '💰 Sprzedaj uszy goblinów (8💰/szt.)',
+        label: 'Sprzedaj uszy goblinów (8 zł/szt.)',
         fn: () => {
           const n = game.player.inv.count('goblin_ear');
           if (!n) { game.ui.toast('Nie masz uszu goblinów.', 'bad'); game.audio.play('error'); return; }
           game.player.inv.remove('goblin_ear', n);
           game.player.addGold(n * 8);
           game.audio.play('coin');
-          game.ui.toast(`Sprzedano ${n}x ucho goblina za ${n * 8}💰`, 'gold');
+          game.ui.toast(`Sprzedano ${n}x ucho goblina za ${n * 8} zł`, 'gold');
           game.ui.refreshShopGold?.();
         },
       });
@@ -290,13 +290,13 @@ export function getDialogue(npcId, game) {
         opts.push(turnInOpt('s4_herbs', 'Znakomite zbiory! Kociołek już bulgocze. Trzymaj mikstury i złoto, przyjacielu!'));
       opts.push(tradeOpt('wizard'));
       opts.push({
-        label: '✨ Bezpłatna mikstura za zioła (2x słoneczne ziele)',
+        label: 'Bezpłatna mikstura za zioła (2x słoneczne ziele)',
         fn: () => {
           if (game.player.inv.count('herb_sun') >= 2) {
             game.player.inv.remove('herb_sun', 2);
             game.player.inv.add('potion_s');
             game.audio.play('potion');
-            game.ui.toast('Otrzymano: Mała mikstura 🧪');
+            game.ui.toast('Otrzymano: Mała mikstura');
           } else { game.ui.toast('Potrzebujesz 2x słonecznego ziela (żółte kwiaty na łąkach).', 'bad'); game.audio.play('error'); }
         },
       });
@@ -321,7 +321,7 @@ export function getDialogue(npcId, game) {
       const hasHorse = game.player.inv.hasHorse;
       if (!hasHorse) {
         opts.push({
-          label: `🐎 Kup konia (250💰) — szybsze podróże! [Masz: ${game.player.gold}💰]`, cls: 'gold-opt',
+          label: `Kup konia (250 zł) — szybsze podróże! [Masz: ${game.player.gold} zł]`, cls: 'gold-opt',
           fn: () => {
             if (game.player.gold >= 250) {
               game.player.gold -= 250;
@@ -329,14 +329,14 @@ export function getDialogue(npcId, game) {
               game.creatures.spawnPlayerHorse();
               game.audio.play('horse');
               game.ui.closeDialogue();
-              game.ui.toast('🐎 Kupiłeś wierzchowca! Podejdź do niego i naciśnij H, aby dosiąść.', 'quest');
+              game.ui.toast('Kupiłeś wierzchowca! Podejdź do niego i naciśnij H, aby dosiąść.', 'quest');
               game.save();
-            } else { game.ui.toast('Za mało złota! Koń kosztuje 250💰.', 'bad'); game.audio.play('error'); }
+            } else { game.ui.toast('Za mało złota! Koń kosztuje 250 zł.', 'bad'); game.audio.play('error'); }
           },
         });
       } else {
         opts.push({
-          label: '🐎 Gwiżdż na konia (przywoła go do Ciebie)',
+          label: 'Gwiżdż na konia (przywoła go do Ciebie)',
           fn: () => { game.creatures.callHorse(); game.ui.closeDialogue(); },
         });
       }
@@ -353,15 +353,15 @@ export function getDialogue(npcId, game) {
         opts.push(turnInOpt('s1_meat', 'Mmm, świeża dziczyzna! Jesteś aniołem, rycerzu. Trzymaj zapłatę i prowiant na drogę!'));
       opts.push(tradeOpt('tavern'));
       opts.push({
-        label: `🛏️ Odpocznij i zregeneruj siły (10💰, pełne HP)`,
+        label: 'Odpocznij i zregeneruj siły (10 zł, pełne HP)',
         fn: () => {
           if (game.player.hp >= game.player.maxHp) { game.ui.toast('Masz pełne zdrowie, nie musisz odpoczywać.'); return; }
           if (game.player.gold >= 10) {
             game.player.gold -= 10;
             game.player.heal(game.player.maxHp);
             game.audio.play('heal');
-            game.ui.toast('😴 Odpocząłeś w karczmie. Pełne zdrowie!', 'gold');
-          } else { game.ui.toast('Potrzebujesz 10💰.', 'bad'); game.audio.play('error'); }
+            game.ui.toast('Odpocząłeś w karczmie. Pełne zdrowie!', 'gold');
+          } else { game.ui.toast('Potrzebujesz 10 zł.', 'bad'); game.audio.play('error'); }
         },
       });
       opts.push(byeOpt());

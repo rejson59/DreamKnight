@@ -109,7 +109,7 @@ export class Player {
       this.stam = this.maxStam;
       if (game) {
         game.audio.play('levelup');
-        game.ui.toast(`⭐ Poziom ${this.level}! Zdrowie i atak wzrosły.`, 'quest');
+        game.ui.toast(`Poziom ${this.level}! Zdrowie i atak wzrosły.`, 'quest');
         game.fx.ring(this.group.position.x, this.group.position.y + 0.2, this.group.position.z, 0xffe27a, 4);
         game.fx.burst(this.group.position.x, this.group.position.y + 1, this.group.position.z, 0xffe27a, 24, 5, 0.9);
       }
@@ -151,7 +151,7 @@ export class Player {
     this.updateTorchVisual();
     this.updateWeaponMesh();
     game.audio.play('click');
-    game.ui.toast(this.torchOn ? '🕯️ Zapalono pochodnię' : 'Pochodnia zgaszona');
+    game.ui.toast(this.torchOn ? 'Zapalono pochodnię' : 'Pochodnia zgaszona');
   }
 
   updateTorchVisual() {
@@ -377,7 +377,7 @@ export class Player {
     // łańcuch kombosa
     this.combo = this.comboWindow > 0 ? (this.combo + 1) % 3 : 0;
     this.comboWindow = 0;
-    if (this.combo === 2) game.ui.comboHit('Potrójny cios! 💥');
+    if (this.combo === 2) game.ui.comboHit('Potrójny cios!');
     game.audio.play('swing');
 
     // błysk cięcia
@@ -431,7 +431,7 @@ export class Player {
     this.heal(60 + this.level * 8);
     game.audio.play('heal');
     game.fx.ring(this.group.position.x, this.group.position.y + 0.2, this.group.position.z, 0x66ff99, 3);
-    game.ui.toast('✨ Uleczono rany!', 'gold');
+    game.ui.toast('Uleczono rany!', 'gold');
     return true;
   }
 
@@ -441,7 +441,7 @@ export class Player {
       this.heal(120);
       game.audio.play('potion');
       game.fx.burst(this.group.position.x, this.group.position.y + 1.2, this.group.position.z, 0x66ff99, 10, 2, 0.6);
-      game.ui.toast('⚗️ +120 HP', 'gold');
+      game.ui.toast('+120 HP', 'gold');
       return true;
     }
     if (this.inv.count('potion_s') > 0) {
@@ -449,7 +449,7 @@ export class Player {
       this.heal(50);
       game.audio.play('potion');
       game.fx.burst(this.group.position.x, this.group.position.y + 1.2, this.group.position.z, 0x66ff99, 8, 2, 0.6);
-      game.ui.toast('🧪 +50 HP', 'gold');
+      game.ui.toast('+50 HP', 'gold');
       return true;
     }
     game.ui.toast('Brak mikstur! Kup je na rynku.', 'bad');
@@ -470,7 +470,7 @@ export class Player {
       const hp = h.rig.group.position;
       hp.set(this.group.position.x + 1.5, this.world.walkHeight(this.group.position.x + 1.5, this.group.position.z), this.group.position.z);
       game.audio.play('horse');
-      game.ui.toast('🐎 Zsiadłeś z konia');
+      game.ui.toast('Zsiadłeś z konia');
     } else {
       const d = Math.hypot(h.rig.group.position.x - this.group.position.x, h.rig.group.position.z - this.group.position.z);
       if (d > 4) {
@@ -486,7 +486,7 @@ export class Player {
       this.mounted = true;
       game.audio.play('horse');
       game.fx.burst(this.group.position.x, this.group.position.y + 0.3, this.group.position.z, 0x9a8a6a, 8, 2, 0.5);
-      game.ui.toast('🐎 Jedziesz konno! (H — zsiądź)');
+      game.ui.toast('Jedziesz konno! (H — zsiądź)');
     }
   }
 
@@ -499,7 +499,7 @@ export class Player {
     this.group.scale.set(1, 1, 1);
     this.group.position.set(-19, 0.42, -49);
     this.camYaw = 0;
-    game.ui.toast('🛡️ Obudziłeś się w swojej komnacie.', 'quest');
+    game.ui.toast('Obudziłeś się w swojej komnacie.', 'quest');
   }
 
   serialize() {

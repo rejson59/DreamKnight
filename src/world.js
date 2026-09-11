@@ -52,6 +52,22 @@ function distRoad(x, z) {
   return d;
 }
 
+// Odcinki ścieżek 3D (wypełnia buildPaths) — odstraszają roślinność
+let PATH_SEGS = [];
+function distPath(x, z) {
+  let best = 1e9;
+  for (const [x1, z1, x2, z2] of PATH_SEGS) {
+    const dx = x2 - x1, dz = z2 - z1;
+    const len2 = dx * dx + dz * dz;
+    let t = len2 > 0 ? ((x - x1) * dx + (z - z1) * dz) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const ddx = x - (x1 + dx * t), ddz = z - (z1 + dz * t);
+    const d = Math.sqrt(ddx * ddx + ddz * ddz);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
 let campH = null;
 let arenaH = null;
 export function groundHeight(x, z) {
@@ -190,6 +206,7 @@ export class World {
     this.buildCave();
     this.buildRuins();
     this.buildArena();
+    this.buildPaths();
     this.buildVegetation();
     this.buildParticles();
     this.buildPickups();
@@ -818,7 +835,7 @@ export class World {
     ];
     for (const st of stalls) this.buildStall(st);
     // Latarnie rynku
-    for (const [lx, lz] of [[-20, 12], [20, 12], [-20, -6], [20, -4], [0, 26], [0, -14]]) {
+    for (const [lx, lz] of [[-20, 12], [20, 12], [-20, -6], [20, -4], [5, 26], [5, -14]]) {
       this.addTorch(lx, 3, lz, true);
     }
     // KUŹNIA
@@ -1116,7 +1133,7 @@ export class World {
     // szyld karczmy
     g.add(this.box(0.3, 4.2, 0.3, beam, -9.5, 2.1, 5));
     g.add(this.box(2.6, 0.25, 0.25, beam, -8.2, 3.9, 5));
-    const signTex = this.textPlaque('🍺 ZŁOTY KUFEL');
+    const signTex = this.textPlaque('ZŁOTY KUFEL');
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1), new THREE.MeshStandardMaterial({ map: signTex, side: THREE.DoubleSide }));
     sign.position.set(-8.2, 3.1, 5);
     g.add(sign);
@@ -1141,7 +1158,10 @@ export class World {
     const x = c.getContext('2d');
     x.fillStyle = '#3a2812'; x.fillRect(0, 0, 512, 128);
     x.strokeStyle = '#d8a83c'; x.lineWidth = 8; x.strokeRect(6, 6, 500, 116);
-    x.fillStyle = '#ffe9b0'; x.font = 'bold 52px Georgia'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#ffe9b0'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    let fs = 52;
+    x.font = `bold ${fs}px Georgia`;
+    while (x.measureText(text).width > 460 && fs > 20) { fs -= 4; x.font = `bold ${fs}px Georgia`; }
     x.fillText(text, 256, 66);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
@@ -1651,12 +1671,124 @@ export class World {
     this.lights.arena = this.point(0xff3344, 24, 34, ax, ay + 5, az - 8);
   }
 
+  // ---------- ŚCIEŻKI I DROGOWSKAZY ----------
+  // Taśma drogi wzdłuż punktów, dopasowana do terenu
+  buildPath(points, width, tex) {
+    const pts = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const [x1, z1] = points[i], [x2, z2] = points[i + 1];
+      const d = Math.hypot(x2 - x1, z2 - z1);
+      const n = Math.max(1, Math.round(d / 2.5));
+      for (let k = 0; k < n; k++) pts.push([x1 + (x2 - x1) * k / n, z1 + (z2 - z1) * k / n]);
+      PATH_SEGS.push([x1, z1, x2, z2]);
+    }
+    pts.push(points[points.length - 1]);
+    const pos = [], uv = [], idx = [];
+    let dist = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const [x, z] = pts[i];
+      const [px, pz] = pts[Math.max(0, i - 1)], [nx, nz] = pts[Math.min(pts.length - 1, i + 1)];
+      let dx = nx - px, dz = nz - pz;
+      const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+      const ox = -dz * width / 2, oz = dx * width / 2;
+      if (i > 0) dist += Math.hypot(x - pts[i - 1][0], z - pts[i - 1][1]);
+      pos.push(x + ox, this.walkHeight(x + ox, z + oz) + 0.07, z + oz);
+      pos.push(x - ox, this.walkHeight(x - ox, z - oz) + 0.07, z - oz);
+      uv.push(0, dist * 0.25, 1, dist * 0.25);
+      if (i > 0) { const a = (i - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const t = tex.clone(); t.needsUpdate = true;
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+      map: t, roughness: 1, metalness: 0,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    }));
+    m.receiveShadow = true;
+    this.scene.add(m);
+  }
+
+  buildPaths() {
+    PATH_SEGS = [];
+    const dirt = this.T.dirt, cob = this.T.cobble;
+    // --- brukowane ulice w mieście ---
+    this.buildPath([[0, -38], [0, -4]], 4, cob);
+    this.buildPath([[0, 14], [0, 86]], 4, cob);
+    this.buildPath([[0, 0], [-12, -3], [-21, -7]], 3, cob);      // karczma
+    this.buildPath([[6, 5], [14, 9], [21, 12]], 3, cob);        // kuźnia
+    this.buildPath([[-4, 6], [-15, 9], [-25, 11]], 3, cob);      // stajnia
+    this.buildPath([[5, -2], [15, -8], [23, -13]], 3, cob);      // wieża
+    // plac wokół fontanny
+    const plazaTex = cob.clone(); plazaTex.needsUpdate = true; plazaTex.repeat.set(6, 6);
+    const plaza = new THREE.Mesh(new THREE.CircleGeometry(7.6, 28),
+      new THREE.MeshStandardMaterial({ map: plazaTex, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    plaza.rotation.x = -Math.PI / 2;
+    plaza.position.set(0, 0.06, 5);
+    plaza.receiveShadow = true;
+    this.scene.add(plaza);
+    // --- drogi bite ---
+    this.buildPath([[0, 86], [0, 108], [0, 160]], 3, dirt);
+    this.buildPath([[0, 160], [-168, 160], [-168, 64]], 3, dirt);
+    this.buildPath([[0, 160], [190, 160], [190, 48]], 3, dirt);
+    this.buildPath([[0, 160], [-40, 166]], 3, dirt);
+    this.buildPath([[-40, 166], [58, 188]], 3, dirt);
+    this.buildPath([[58, 188], [100, 192], [140, 196], [140, 238]], 3, dirt);
+    this.buildPath([[190, 140], [150, 80], [140, 0], [120, -70], [95, -140], [60, -185], [42, -203]], 3, dirt);
+    this.buildPath([[40, -205], [30, -226], [20, -244]], 2.2, dirt);
+    // --- drogowskazy: [x, z, [[tekst, dx, dz], ...]] ---
+    const signs = [
+      [4, 92, [['ZAMEK', 0, -1], ['ROZSTAJE', 0, 1]]],
+      [5, 164, [['ZAMEK', 0, -1], ['FARMA · JASKINIA', -1, 0], ['MŁYN · LAS', 1, 0]]],
+      [-160, 160, [['MROCZNA JASKINIA', 0, -1], ['ROZSTAJE', 1, 0]]],
+      [182, 160, [['MAGICZNY LAS', 0, -1], ['ROZSTAJE', -1, 0]]],
+      [183, 132, [['GÓRY MGLISTE', -0.55, -0.83], ['MAGICZNY LAS', 0.08, -1]]],
+      [184, 62, [['SERCE LASU', 0, -1], ['ROZSTAJE', 0, 1]]],
+      [-36, 164, [['MŁYN · RUINY', 1, 0], ['KRÓLESTWO', 0.7, -0.7]]],
+      [54, 186, [['ZAPOMNIANE RUINY', 1, 0.1], ['FARMA', -1, 0]]],
+      [134, 200, [['RUINY', 0.15, 1], ['MŁYN', -1, 0]]],
+      [-168, 70, [['MROCZNA JASKINIA', 0, -1]]],
+      [52, -198, [['SZCZYT ZGUBY', -0.5, -1]]],
+      [95, -136, [['OBÓZ GOBLINÓW', -0.4, -1], ['LAS', 0.4, 1]]],
+    ];
+    for (const [sx, sz, boards] of signs) this.buildSignpost(sx, sz, boards);
+  }
+
+  buildSignpost(x, z, boards) {
+    const y = this.walkHeight(x, z);
+    const g = new THREE.Group();
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3.4, 8), this.M(0x5a4020));
+    post.position.y = 1.7; post.castShadow = true;
+    g.add(post);
+    boards.forEach(([text, dx, dz], i) => {
+      const b = new THREE.Group();
+      const plank = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.44, 0.1), this.M(0x6a4e2a));
+      plank.castShadow = true;
+      b.add(plank);
+      const tp = new THREE.PlaneGeometry(2.4, 0.4);
+      const tm = new THREE.MeshStandardMaterial({ map: this.textPlaque(text), roughness: 0.9 });
+      const f = new THREE.Mesh(tp, tm); f.position.z = 0.06; b.add(f);
+      const bk = new THREE.Mesh(tp, tm); bk.position.z = -0.06; bk.rotation.y = Math.PI; b.add(bk);
+      const head = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5, 6), this.M(0x6a4e2a));
+      head.rotation.z = -Math.PI / 2; head.position.x = 1.45; b.add(head);
+      b.position.y = 2.75 - i * 0.58;
+      b.rotation.y = Math.atan2(-dz, dx);
+      g.add(b);
+    });
+    g.position.set(x, y, z);
+    this.scene.add(g);
+    this.circ(x, z, 0.6);
+  }
+
   // ---------- ROŚLINNOŚĆ (instancje) ----------
   scatterOK(x, z, forTree = false) {
     const sq = sqDist(x, z);
     if (sq < MOAT_OUT + 6) return false;
     if (Math.abs(x) > WORLD_HALF - 8 || Math.abs(z) > WORLD_HALF - 8) return false;
     if (distRoad(x, z) < (forTree ? 7 : 4)) return false;
+    if (PATH_SEGS.length && distPath(x, z) < (forTree ? 5 : 3)) return false;
     if (dist(x, z, LOC.forestPond.x, LOC.forestPond.z) < 20) return false;
     if (dist(x, z, LOC.caveCenter.x, LOC.caveCenter.z) < 34) return false;
     if (dist(x, z, LOC.goblinCamp.x, LOC.goblinCamp.z) < 26) return false;

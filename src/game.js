@@ -14,6 +14,14 @@ import { makeTextures } from './textures.js';
 import { SAVE_KEY, QUALITY_PRESETS, detectQuality, LOC } from './config.js';
 import { ITEMS } from './items.js';
 
+// Powtarzalne zlecenia z tablicy ogłoszeń na rynku
+const BOUNTIES = [
+  { kind: 'wolf', name: 'Wilki', where: 'Magiczny Las', need: 5, reward: 120 },
+  { kind: 'boar', name: 'Dziki', where: 'południowe łąki', need: 4, reward: 100 },
+  { kind: 'goblin', name: 'Gobliny', where: 'Góry Mgliste', need: 6, reward: 180 },
+  { kind: 'skeleton', name: 'Szkielety', where: 'Zapomniane Ruiny', need: 5, reward: 220, req: 'q7_ruins' },
+];
+
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
@@ -29,6 +37,7 @@ export class Game {
     this.cutsceneActive = false;
     this.trauma = 0;
     this._cutFlags = {};
+    this.bounty = null;
   }
 
   async init(onProgress) {
@@ -140,7 +149,7 @@ export class Game {
       if (fps < 32 && i > 0) {
         this.quality = order[i - 1];
         this.applyQuality(this.quality);
-        this.ui.toast(`⚙️ Dostosowano jakość do: ${this.quality} (płynność)`);
+        this.ui.toast(`Dostosowano jakość do: ${this.quality} (płynność)`);
       } else if (fps > 55 && i < order.indexOf(this._autoMax || 'high')) {
         this.quality = order[i + 1];
         this.applyQuality(this.quality);
@@ -156,10 +165,11 @@ export class Game {
     this.player.reset(true);
     this.quests = new QuestManager(this);
     this.chestLooted = { bed: false, goblin: false, cave: false };
+    this.bounty = null;
     this.world.dayT = 0.32;
     this.ui.refreshQuestMarkers();
     this.startPlaying();
-    this.ui.toast('🛡️ Witaj, rycerzu! Udaj się do króla na audiencję.', 'quest');
+    this.ui.toast('Witaj, rycerzu! Udaj się do króla na audiencję.', 'quest');
     this.ui.hint('WASD — ruch • mysz — kamera • E — rozmowa • I — ekwipunek', 8000);
     this.save();
     setTimeout(() => { if (this.state === 'playing' && !this.cutsceneActive) this.cutscene.play('intro'); }, 800);
@@ -169,7 +179,7 @@ export class Game {
     this.audio.ensure();
     this.load();
     this.startPlaying();
-    this.ui.toast('📜 Witaj ponownie, rycerzu!', 'quest');
+    this.ui.toast('Witaj ponownie, rycerzu!', 'quest');
   }
 
   startPlaying() {
@@ -192,7 +202,7 @@ export class Game {
     this.input.unlock();
     document.getElementById('pause-menu').classList.remove('hidden');
     document.getElementById('pause-info').textContent =
-      `Poziom ${this.player.level} • ${this.player.gold}💰 • ${this.zoneName()}`;
+      `Poziom ${this.player.level} • ${this.player.gold} zł • ${this.zoneName()}`;
     document.getElementById('quality2').value = this.quality;
   }
 
@@ -256,9 +266,9 @@ export class Game {
     document.getElementById('finale-text').textContent = epic
       ? `MROCZNY RYCERZ POKONANY! Król Aldric mianował Cię LEGENDĄ KRÓLESTWA! ` +
         `Ciemność pierzchła, a Twoje imię będą śpiewać bardowie przez pokolenia. ` +
-        `Zebrane złoto: ${this.player.gold}💰 • Poziom: ${this.player.level}. Przygoda trwa dalej — eksploruj świat!`
+        `Zebrane złoto: ${this.player.gold} zł • Poziom: ${this.player.level}. Przygoda trwa dalej — eksploruj świat!`
       : `Król Aldric mianował Cię BOHATEREM KORONY! Królestwo jest bezpieczne dzięki Twojemu męstwu. ` +
-        `Zebrane złoto: ${this.player.gold}💰 • Poziom: ${this.player.level}. Przygoda trwa dalej — eksploruj świat!`;
+        `Zebrane złoto: ${this.player.gold} zł • Poziom: ${this.player.level}. Przygoda trwa dalej — eksploruj świat!`;
     document.getElementById('finale-screen').classList.remove('hidden');
     this.audio.play('win');
     this.input.unlock();
@@ -348,19 +358,22 @@ export class Game {
     const ls = this.creatures.lostSheep;
     if (ls && !ls.dead && this.quests.state.s2_sheep.status === 'active') {
       const d = Math.hypot(ls.rig.group.position.x - p.x, ls.rig.group.position.z - p.z);
-      if (d < 3.2) return { type: 'sheep', label: 'Pogłaszcz owcę 🐑' };
+      if (d < 3.2) return { type: 'sheep', label: 'Pogłaszcz owcę' };
     }
     // 4. Pickupy
     for (const pk of this.world.pickups) {
       if (pk.taken) continue;
       if (Math.hypot(pk.x - p.x, pk.z - p.z) < 2.6) {
-        const names = { herb_moon: 'Zbierz księżycowe ziele 🌿', herb_sun: 'Zbierz słoneczne ziele 🌻', crystal_shard: 'Weź odłamek kryształu 💎' };
+        const names = { herb_moon: 'Zbierz księżycowe ziele', herb_sun: 'Zbierz słoneczne ziele', crystal_shard: 'Weź odłamek kryształu' };
         return { type: 'pickup', pickup: pk, label: names[pk.kind] };
       }
     }
     // 5. Łóżko
     if (Math.hypot(LOC.knightBed.x - p.x, LOC.knightBed.z - p.z) < 2.8)
-      return { type: 'bed', label: 'Śpij do rana (pełne HP) 🛏️' };
+      return { type: 'bed', label: 'Śpij do rana (pełne HP)' };
+    // 5b. Tablica zleceń na rynku
+    if (Math.hypot(-6 - p.x, 24 - p.z) < 3.4)
+      return { type: 'board', label: 'Tablica zleceń' };
     // 6. Skrzynie
     const chests = [
       { key: 'bed', x: -14.8, z: -58.5, label: 'Otwórz skrzynię' },
@@ -386,11 +399,12 @@ export class Game {
         this.ui.showDialogue(`${it.npc.def.name} — ${it.npc.def.title}`, dlg.text, dlg.options);
         break;
       }
+      case 'board': this.showBountyBoard(); break;
       case 'horse': p.mount(this); break;
       case 'sheep': {
         this.quests.onSpecial('lost_sheep');
         this.audio.play('questDone');
-        this.ui.toast('🐑 Białka beczy radośnie i wraca na farmę!', 'quest');
+        this.ui.toast('Białka beczy radośnie i wraca na farmę!', 'quest');
         // owca teleportuje się na farmę
         const ls = this.creatures.lostSheep;
         ls.home = { x: LOC.farm.x - 10, z: LOC.farm.z + 10 };
@@ -405,7 +419,7 @@ export class Game {
         pk.mesh.visible = false;
         p.inv.add(pk.kind);
         this.audio.play('pickup');
-        const names = { herb_moon: 'Księżycowe ziele 🌿', herb_sun: 'Słoneczne ziele 🌻', crystal_shard: 'Odłamek kryształu 💎' };
+        const names = { herb_moon: 'Księżycowe ziele', herb_sun: 'Słoneczne ziele', crystal_shard: 'Odłamek kryształu' };
         this.ui.toast(`+ ${names[pk.kind]}`);
         this.quests.onCollect(pk.kind);
         break;
@@ -415,7 +429,7 @@ export class Game {
         p.stam = p.maxStam;
         this.world.dayT = 0.3; // ranek
         this.audio.play('snore');
-        this.ui.toast('😴 Przespano noc. Pełne siły!', 'gold');
+        this.ui.toast('Przespano noc. Pełne siły!', 'gold');
         this.save();
         break;
       }
@@ -424,10 +438,10 @@ export class Game {
         this.audio.play('quest');
         if (it.chest === 'bed') {
           p.addGold(30); p.inv.add('potion_s');
-          this.ui.toast('🎁 Skrzynia: 30💰 + mikstura!', 'gold');
+          this.ui.toast('Skrzynia: 30 zł + mikstura!', 'gold');
         } else if (it.chest === 'goblin') {
           p.addGold(120); p.inv.add('potion_b');
-          this.ui.toast('🎁 Łup goblinów: 120💰 + duża mikstura!', 'gold');
+          this.ui.toast('Łup goblinów: 120 zł + duża mikstura!', 'gold');
         } else {
           const bossDead = !this.creatures.boss || this.creatures.boss.dead;
           if (!bossDead) {
@@ -437,7 +451,7 @@ export class Game {
           } else {
             p.inv.add('royal_crystal');
             p.addGold(100);
-            this.ui.toast('👑 Zdobyto KRYSZTAŁ KRÓLEWSKI! Zanieś go królowi!', 'quest');
+            this.ui.toast('Zdobyto KRYSZTAŁ KRÓLEWSKI! Zanieś go królowi!', 'quest');
             this.quests.state.q5_crystal.count = 1;
             if (this.quests.state.q5_crystal.status === 'active') {
               this.quests.state.q5_crystal.status = 'turnin';
@@ -451,6 +465,66 @@ export class Game {
     }
   }
 
+  // ---------- ZLECENIA (tablica ogłoszeń) ----------
+  onBountyKill(kind) {
+    const b = this.bounty;
+    if (!b || b.kind !== kind || b.count >= b.need) return;
+    b.count++;
+    if (b.count >= b.need) {
+      this.audio.play('questDone');
+      this.ui.toast(`Zlecenie wykonane: ${b.name}! Wróć do tablicy po nagrodę.`, 'quest');
+    } else {
+      this.ui.toast(`Zlecenie: ${b.name} — ${b.count}/${b.need}`);
+    }
+  }
+
+  showBountyBoard() {
+    const b = this.bounty;
+    const opts = [];
+    const bye = { label: 'Odejdź', fn: () => this.ui.closeDialogue() };
+    if (b && b.count >= b.need) {
+      opts.push({
+        label: `Odbierz nagrodę: ${b.reward} zł`, cls: 'gold-opt',
+        fn: () => {
+          this.player.addGold(b.reward);
+          this.audio.play('coin');
+          this.ui.toast(`Nagroda za zlecenie: +${b.reward} zł`, 'gold');
+          this.bounty = null;
+          this.save();
+          this.ui.closeDialogue();
+        },
+      });
+      opts.push(bye);
+      this.ui.showDialogue('Tablica zleceń', `Zlecenie „${b.name}” wykonane! Stempel łowczego przybity — nagroda czeka.`, opts);
+      return;
+    }
+    if (b) {
+      opts.push({
+        label: 'Zrezygnuj ze zlecenia',
+        fn: () => { this.bounty = null; this.save(); this.ui.closeDialogue(); },
+      });
+      opts.push(bye);
+      this.ui.showDialogue('Tablica zleceń', `Aktualne zlecenie: „${b.name}” — ${b.count}/${b.need}. Wróć, gdy skończysz.`, opts);
+      return;
+    }
+    for (const bo of BOUNTIES) {
+      if (bo.req && this.quests.state[bo.req]?.status === 'locked') continue;
+      opts.push({
+        label: `${bo.name} (${bo.need}x, ${bo.reward} zł) — ${bo.where}`,
+        fn: () => {
+          this.bounty = { kind: bo.kind, name: bo.name, need: bo.need, count: 0, reward: bo.reward };
+          this.audio.play('quest');
+          this.ui.toast(`Nowe zlecenie: ${bo.name} (${bo.need}x)`, 'quest');
+          this.save();
+          this.ui.closeDialogue();
+        },
+      });
+    }
+    opts.push(bye);
+    this.audio.play('click');
+    this.ui.showDialogue('Tablica zleceń', 'Na tablicy wiszą ogłoszenia łowczego. Wybierz zlecenie — nagroda w złocie czeka na śmiałka:', opts);
+  }
+
   // ---------- ZAPIS ----------
   save(manual = false) {
     if (!this.player) return;
@@ -461,10 +535,11 @@ export class Game {
         chests: this.chestLooted,
         dayT: this.world.dayT,
         bossDead: this.creatures.boss?.dead || false,
+        bounty: this.bounty,
         v: 2,
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-      if (manual) this.ui.toast('💾 Zapisano grę!', 'gold');
+      if (manual) this.ui.toast('Zapisano grę!', 'gold');
     } catch { /* brak miejsca */ }
   }
 
@@ -478,6 +553,7 @@ export class Game {
       this.player.updateWeaponMesh();
       this.quests.deserialize(d.quests);
       this.chestLooted = d.chests || this.chestLooted;
+      this.bounty = d.bounty || null;
       this.world.dayT = d.dayT ?? 0.32;
       this.creatures.ensurePlayerHorse(this.player.inv.hasHorse);
       if (d.bossDead && this.creatures.boss) {
@@ -512,7 +588,7 @@ export class Game {
       const z = this.world.zoneAt(p.group.position.x, p.group.position.z);
       if (z !== this.zone) {
         this.zone = z;
-        this.ui.toast(`🧭 ${this.zoneName()}`);
+        this.ui.zoneBanner(this.zoneName());
         if (z === 'ruins' && !this._cutFlags.ruins) { this._cutFlags.ruins = true; this.cutscene.play('ruins'); }
         if (z === 'arena' && !this._cutFlags.boss) {
           this._cutFlags.boss = true;

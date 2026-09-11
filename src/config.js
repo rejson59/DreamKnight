@@ -79,4 +79,6 @@ export const ZONE_NAMES = {
   mountains: 'Góry Mgliste',
   cave: 'Mroczna Jaskinia',
   wild: 'Dzicz',
+  ruins: 'Zapomniane Ruiny',
+  arena: 'Szczyt Zguby',
 };

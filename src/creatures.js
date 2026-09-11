@@ -181,7 +181,7 @@ export class CreatureManager {
     const h = this.playerHorse.rig.group.position;
     h.set(p.group.position.x + 2, this.y(p.group.position.x + 2, p.group.position.z + 2), p.group.position.z + 2);
     this.game.audio.play('horse');
-    this.game.ui.toast('🐎 Koń przybiegł do Ciebie!');
+    this.game.ui.toast('Koń przybiegł do Ciebie!');
   }
 
   // ---- OBRAŻENIA ----
@@ -224,20 +224,20 @@ export class CreatureManager {
       if (id === 'gold') p.addGold(n + ((Math.random() * n) | 0));
       else {
         p.inv.add(id, n);
-        game.ui.toast(`🎁 Zdobyto: ${n}x ${this.itemName(id)}`);
+        game.ui.toast(`Zdobyto: ${n}x ${this.itemName(id)}`);
         game.quests.onCollect(id);
       }
     }
-    game.ui.toast(`⚔️ Pokonano: ${this.enemyName(e.kind)}! +${e.xp} PD`);
+    game.ui.toast(`Pokonano: ${this.enemyName(e.kind)}! +${e.xp} PD`);
     game.quests.onKill(e.kind);
     if (e.kind === 'golem') {
       game.ui.hideBoss();
-      game.ui.toast('👑 Golem pokonany! Otwórz skrzynię w głębi jaskini!', 'quest');
+      game.ui.toast('Golem pokonany! Otwórz skrzynię w głębi jaskini!', 'quest');
       game.audio.play('win');
     }
     if (e.kind === 'darkknight') {
       game.ui.hideBoss();
-      game.ui.toast('⚔️ Mroczny Rycerz pokonany! Królestwo jest wolne!', 'quest');
+      game.ui.toast('Mroczny Rycerz pokonany! Królestwo jest wolne!', 'quest');
       game.audio.play('win');
       game.quests.onSpecial('darkknight_dead');
     }
@@ -255,7 +255,7 @@ export class CreatureManager {
       game.player.addXp(a.xp, game);
       if (a.loot) {
         game.player.inv.add(a.loot, a.type === 'deer' ? 2 : 1);
-        game.ui.toast(`🎁 Zdobyto: ${this.itemName(a.loot)}`);
+        game.ui.toast(`Zdobyto: ${this.itemName(a.loot)}`);
         game.quests.onCollect(a.loot);
       }
     } else {
@@ -324,7 +324,7 @@ export class CreatureManager {
       game.fx.burst(sx, this.y(sx, sz) + 1, sz, 0xaa44ff, 20, 5, 0.8);
       game.fx.ring(sx, this.y(sx, sz) + 0.2, sz, 0xaa44ff, 3);
     }
-    game.ui.toast('💀 Mroczny Rycerz wzywa szkielety!', 'bad');
+    game.ui.toast('Mroczny Rycerz wzywa szkielety!', 'bad');
   }
 
   // ---- AI ----

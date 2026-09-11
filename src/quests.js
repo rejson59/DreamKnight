@@ -144,7 +144,7 @@ export class QuestManager {
     }
     this.tracked = id;
     this.game.audio.play('quest');
-    this.game.ui.toast(`📜 Nowe zadanie: ${QUESTS[id].name}`, 'quest');
+    this.game.ui.toast(`Nowe zadanie: ${QUESTS[id].name}`, 'quest');
     this.game.ui.refreshQuestMarkers();
     return true;
   }
@@ -180,7 +180,7 @@ export class QuestManager {
         if (s.count >= o.count) {
           s.status = 'turnin';
           this.game.audio.play('questDone');
-          this.game.ui.toast(`📜 Zadanie „${q.name}” — wróć do ${this.game.npcs.nameOf(o.turnIn)}!`, 'quest');
+          this.game.ui.toast(`Zadanie „${q.name}” — wróć do ${this.game.npcs.nameOf(o.turnIn)}!`, 'quest');
         }
         this.game.ui.refreshQuestMarkers();
       }
@@ -188,16 +188,17 @@ export class QuestManager {
   }
 
   onKill(kind) {
+    if (this.game.onBountyKill) this.game.onBountyKill(kind);
     for (const [id, q] of Object.entries(QUESTS)) {
       const s = this.state[id];
       const o = q.objective;
       if (s.status === 'active' && o.kind === 'kill' && o.target === kind) {
         s.count = Math.min(o.count, s.count + 1);
-        this.game.ui.toast(`⚔️ ${q.name}: ${s.count}/${o.count}`);
+        this.game.ui.toast(`${q.name}: ${s.count}/${o.count}`);
         if (s.count >= o.count) {
           s.status = 'turnin';
           this.game.audio.play('questDone');
-          this.game.ui.toast(`📜 Zadanie „${q.name}” — wróć do ${this.game.npcs.nameOf(o.turnIn)}!`, 'quest');
+          this.game.ui.toast(`Zadanie „${q.name}” — wróć do ${this.game.npcs.nameOf(o.turnIn)}!`, 'quest');
         }
         this.game.ui.refreshQuestMarkers();
       }
@@ -215,7 +216,7 @@ export class QuestManager {
       if (s.status === 'active' && o.kind === 'special' && o.target === flag) {
         s.count = 1; s.status = 'turnin';
         this.game.audio.play('questDone');
-        this.game.ui.toast(`📜 Zadanie „${q.name}” — wróć do ${this.game.npcs.nameOf(o.turnIn)}!`, 'quest');
+        this.game.ui.toast(`Zadanie „${q.name}” — wróć do ${this.game.npcs.nameOf(o.turnIn)}!`, 'quest');
         this.game.ui.refreshQuestMarkers();
       }
     }
@@ -244,7 +245,7 @@ export class QuestManager {
     for (const it of q.reward.items || []) p.inv.add(it);
     s.status = 'done';
     this.game.audio.play('win');
-    this.game.ui.toast(`🏆 Ukończono: ${q.name}! +${q.reward.gold}💰`, 'quest');
+    this.game.ui.toast(`Ukończono: ${q.name}! +${q.reward.gold} zł`, 'quest');
     this.refresh();
     if (id === 'q6_finale') this.game.onFinale();
     if (id === 'q8_darkknight') this.game.onFinale(true);
@@ -260,7 +261,7 @@ export class QuestManager {
     for (const it of q.reward.items || []) p.inv.add(it);
     this.state[id].status = 'done';
     this.game.audio.play('win');
-    this.game.ui.toast(`🏆 Ukończono: ${q.name}! +${q.reward.gold}💰`, 'quest');
+    this.game.ui.toast(`Ukończono: ${q.name}! +${q.reward.gold} zł`, 'quest');
     this.game.save();
   }
 
