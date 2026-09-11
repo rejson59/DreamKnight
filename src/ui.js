@@ -34,6 +34,7 @@ export class UI {
       this.renderMute();
     };
     $('btn-pause-help').onclick = () => { $('help-screen').classList.remove('hidden'); };
+    $('btn-pause-tutorial').onclick = () => { this.game.audio.play('click'); this.game.tutorial.show(); };
     $('btn-quit').onclick = () => this.game.quitToMenu();
     $('btn-respawn').onclick = () => this.game.respawn();
     $('btn-finale-close').onclick = () => { $('finale-screen').classList.add('hidden'); this.game.resume(); };

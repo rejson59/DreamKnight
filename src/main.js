@@ -1,10 +1,12 @@
 // Dream Knight — punkt wejścia.
 import { Game } from './game.js';
 import { detectQuality } from './config.js';
+import { Tutorial, shouldShowTutorial } from './tutorial.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game-canvas');
 const game = new Game(canvas);
+game.tutorial = new Tutorial(game);
 window.__game = game; // do debugowania
 
 async function boot() {
@@ -48,8 +50,10 @@ async function boot() {
     game.continueGame();
   };
   $('btn-help').onclick = () => $('help-screen').classList.remove('hidden');
+  $('btn-tutorial').onclick = () => { game.audio.ensure(); game.tutorial.show(); };
   $('btn-help-close').onclick = () => $('help-screen').classList.add('hidden');
-  game.ui.showMenu(Game.hasSave());
+  if (shouldShowTutorial()) game.tutorial.show(() => game.ui.showMenu(Game.hasSave()));
+  else game.ui.showMenu(Game.hasSave());
 }
 
 boot();

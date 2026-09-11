@@ -367,3 +367,14 @@ kbd { background: #222d47; border: 1px solid #4a5a7a; border-bottom-width: 3px; 
   #minimap { width: 84px; height: 84px; }
   #quest-tracker { display: none; }
 }
+
+/* ---------- SAMOUCZEK ---------- */
+.tut-panel { max-width: 480px; }
+.tut-icon { color: var(--gold); margin-bottom: 6px; }
+.tut-panel h2 { margin-bottom: 8px; }
+#tut-text { font-size: 15px; line-height: 1.6; min-height: 96px; color: var(--text); margin: 0 0 12px; }
+#tut-dots { display: flex; gap: 8px; justify-content: center; margin-bottom: 14px; }
+.tut-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 1px solid rgba(232,182,76,0.4); }
+.tut-dot.active { background: var(--gold); box-shadow: 0 0 8px rgba(232,182,76,0.7); }
+.tut-buttons { display: flex; gap: 8px; }
+.tut-buttons .btn { margin: 0; }

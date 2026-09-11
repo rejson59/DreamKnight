@@ -43,6 +43,7 @@
         <button id="btn-new" class="btn primary big">Nowa gra</button>
         <button id="btn-continue" class="btn gold big hidden">Kontynuuj przygodę</button>
         <button id="btn-help" class="btn ghost">Sterowanie / pomoc</button>
+        <button id="btn-tutorial" class="btn ghost">Samouczek</button>
         <p class="version">v2.2 • PC / tablet / telefon • postęp zapisuje się automatycznie</p>
       </div>
     </div>
@@ -206,6 +207,7 @@
           </select>
         </div>
         <button class="btn ghost" id="btn-pause-help">Pomoc</button>
+        <button class="btn ghost" id="btn-pause-tutorial">Samouczek</button>
         <button class="btn danger" id="btn-quit">Wyjdź do menu</button>
       </div>
     </div>
@@ -225,6 +227,21 @@
         <h2 class="gold-title">Chwała bohaterowi!</h2>
         <p id="finale-text"></p>
         <button class="btn primary big" id="btn-finale-close">Kontynuuj przygodę</button>
+      </div>
+    </div>
+
+    <!-- SAMOUCZEK -->
+    <div id="tutorial-screen" class="overlay full hidden">
+      <div class="menu-panel tut-panel">
+        <div id="tut-icon" class="tut-icon"></div>
+        <h2 id="tut-title"></h2>
+        <p id="tut-text"></p>
+        <div id="tut-dots"></div>
+        <div class="tut-buttons">
+          <button id="tut-prev" class="btn ghost">Wstecz</button>
+          <button id="tut-skip" class="btn ghost">Pomiń</button>
+          <button id="tut-next" class="btn primary">Dalej</button>
+        </div>
       </div>
     </div>
 
