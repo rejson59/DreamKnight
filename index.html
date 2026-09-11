@@ -3,52 +3,72 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#0d1626" />
-  <title>Dream Knight - Dream Knight RPG</title>
+  <meta name="theme-color" content="#0b1220" />
+  <title>Dream Knight — Dream Knight RPG</title>
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
   <div id="app">
     <canvas id="game-canvas"></canvas>
 
-    <!-- GŁÓWNE MENU -->
-    <div id="main-menu" class="overlay full">
-      <div class="menu-panel">
-        <h1 class="game-title">DREAM KNIGHT</h1>
-        <p class="subtitle">Rycerz Królestwa • otwarty świat 3D</p>
-        <div class="quality-row">
-          <label for="quality">Jakość grafiki</label>
-          <select id="quality">
-            <option value="low">Niska (słabsze urządzenia)</option>
-            <option value="medium" selected>Średnia</option>
-            <option value="high">Wysoka</option>
-            <option value="ultra">Ultra (mocne PC)</option>
-          </select>
-        </div>
-        <button id="btn-start" class="btn primary big">▶ Rozpocznij grę</button>
-        <button id="btn-help" class="btn ghost">Sterowanie / pomoc</button>
-        <p class="version">v1.0 • wersja przeglądarkowa • PC / tablet / mobile</p>
+    <!-- EKRAN ŁADOWANIA -->
+    <div id="loading-screen" class="overlay full hidden">
+      <div class="loading-inner">
+        <div class="loading-emblem" data-icon="shield" data-size="64"></div>
+        <h1>DREAM KNIGHT</h1>
+        <div class="loading-bar"><div id="loading-fill"></div></div>
+        <p id="loading-text">Ładowanie królestwa…</p>
       </div>
     </div>
 
-    <!-- POMOC / STEROWANIE -->
+    <!-- MENU GŁÓWNE -->
+    <div id="main-menu" class="overlay full hidden">
+      <div class="menu-bg"></div>
+      <div class="menu-panel main">
+        <div class="title-emblem" data-icon="crown" data-size="52"></div>
+        <h1 class="game-title">DREAM KNIGHT</h1>
+        <p class="subtitle">Dream Knight RPG • otwarty świat 3D</p>
+        <p class="story">Królestwo potrzebuje bohatera. Jako mężny rycerz wykonuj misje króla,
+          pomagaj mieszkańcom i przemierzaj góry, magiczny las oraz mroczną jaskinię.</p>
+        <div class="quality-row">
+          <label for="quality">Jakość grafiki</label>
+          <select id="quality">
+            <option value="auto" selected>Automatyczna (zalecana)</option>
+            <option value="low">Niska — słabsze telefony</option>
+            <option value="medium">Średnia — tablety / laptopy</option>
+            <option value="high">Wysoka — mocne PC</option>
+            <option value="ultra">Ultra — bardzo mocne PC</option>
+          </select>
+        </div>
+        <button id="btn-new" class="btn primary big">Nowa gra</button>
+        <button id="btn-continue" class="btn gold big hidden">Kontynuuj przygodę</button>
+        <button id="btn-help" class="btn ghost">Sterowanie / pomoc</button>
+        <button id="btn-tutorial" class="btn ghost">Samouczek</button>
+        <p class="version">v2.2 • PC / tablet / telefon • postęp zapisuje się automatycznie</p>
+      </div>
+    </div>
+
+    <!-- POMOC -->
     <div id="help-screen" class="overlay full hidden">
       <div class="menu-panel">
         <h2>Sterowanie</h2>
         <div class="help-grid">
-          <div><b>PC</b></div>
-          <div>WASD / strzałki — ruch</div>
-          <div>Mysz (przycisk) — kamera</div>
-          <div>Lewy przycisk — atak</div>
-          <div>E / dotknij — interakcja</div>
-          <div>I — ekwipunek</div>
-          <div>J — zadania</div>
-          <div>Shift — bieg</div>
-          <div>Esc / M — menu</div>
-          <div><b>Mobilne</b></div>
-          <div>Joystick po lewej — ruch</div>
-          <div>Obszar po prawej — kamera</div>
-          <div>Przyciski — atak, interakcja, menu</div>
+          <div class="help-h">Komputer</div><div></div>
+          <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / strzałki</div><div>ruch</div>
+          <div>Mysz (kliknij ekran)</div><div>rozglądanie (blokada kursora)</div>
+          <div>Lewy przycisk myszy</div><div>atak / strzał z kuszy</div>
+          <div><kbd>E</kbd></div><div>rozmowa / interakcja / zbieranie</div>
+          <div><kbd>Shift</kbd> + ruch</div><div>bieg (zużywa energię)</div>
+          <div><kbd>Spacja</kbd></div><div>skok</div>
+          <div><kbd>I</kbd> / <kbd>J</kbd></div><div>ekwipunek / zadania</div>
+          <div><kbd>F</kbd> / <kbd>R</kbd></div><div>kula ognia (zaklęcie) / wypij miksturę</div>
+          <div><kbd>T</kbd> / <kbd>H</kbd></div><div>pochodnia / dosiądź konia</div>
+          <div><kbd>Esc</kbd></div><div>pauza / menu</div>
+          <div class="help-h">Telefon / tablet</div><div></div>
+          <div>Joystick (lewy dół)</div><div>ruch (pchnij do końca = bieg)</div>
+          <div>Przeciąganie (prawa strona)</div><div>kamera</div>
+          <div>Przyciski miecza i dymku</div><div>atak / interakcja</div>
+          <div>Przyciski plecaka i zwoju</div><div>ekwipunek / zadania</div>
         </div>
         <button id="btn-help-close" class="btn primary">Zamknij</button>
       </div>
@@ -57,42 +77,67 @@
     <!-- HUD -->
     <div id="hud" class="hidden">
       <div id="hud-top-left">
+        <div id="level-badge"><span id="level-num">POZIOM 1</span><span id="level-stats"></span></div>
         <div class="bars">
-          <div class="bar-label">🧡 Zdrowie</div>
-          <div class="bar hp"><div class="bar-fill" id="hp-fill"></div></div>
-          <div class="bar-label">⚡ Energia</div>
+          <div class="bar hp"><div class="bar-fill" id="hp-fill"></div><span id="hp-text"></span></div>
           <div class="bar stam"><div class="bar-fill" id="stam-fill"></div></div>
+          <div class="bar xp"><div class="bar-fill" id="xp-fill"></div></div>
         </div>
-        <div id="gold" class="pill">💰 0</div>
+        <div class="pill-row">
+          <div id="gold" class="pill"><span class="pill-ic" data-icon="coin" data-size="15"></span><span id="gold-num">0</span></div>
+          <div id="clock" class="pill"><span class="pill-ic" id="clock-ic" data-icon="sun" data-size="15"></span><span id="clock-num"></span></div>
+        </div>
       </div>
 
-      <div id="quest-tracker"></div>
+      <div id="quest-tracker" class="hidden">
+        <div id="tracker-title"><span id="tracker-name">Zadanie</span><button id="tracker-toggle" title="Zwiń / rozwiń">–</button></div>
+        <div id="tracker-text"></div>
+      </div>
+
+      <div id="zone-banner" class="hidden"><span id="zone-banner-text"></span></div>
 
       <div id="minimap-wrap">
-        <canvas id="minimap" width="160" height="160"></canvas>
+        <canvas id="minimap" width="150" height="150"></canvas>
+        <button id="map-toggle" title="Pokaż / ukryj mapę">–</button>
+        <div id="zone-label">Królestwo</div>
       </div>
 
-      <div id="crosshair" class="hidden"></div>
-
-      <div id="interact-prompt" class="hidden">
-        <span id="interact-text"></span>
+      <div id="boss-bar" class="hidden">
+        <div id="boss-name">BOSS</div>
+        <div class="bar boss"><div class="bar-fill" id="boss-fill"></div></div>
       </div>
 
+      <div id="crosshair" class="hidden">◎</div>
+      <div id="interact-prompt" class="hidden"><span id="interact-key">E</span><span id="interact-text"></span></div>
       <div id="context-hint" class="hidden"></div>
+      <div id="combo-hint" class="hidden"></div>
+      <div id="fps-counter">-- FPS</div>
+
+      <div id="letterbox-top" class="hidden"></div>
+      <div id="letterbox-bottom" class="hidden"></div>
+      <div id="cut-subtitle" class="hidden"><div id="cut-sub-who"></div><div id="cut-sub-text"></div></div>
+      <button id="cut-skip" class="hidden">Pomiń (Esc)</button>
 
       <div id="hud-buttons">
-        <button class="hud-btn" id="btn-inventory" title="Ekwipunek">🎒</button>
-        <button class="hud-btn" id="btn-quests" title="Zadania">📜</button>
-        <button class="hud-btn" id="btn-menu" title="Menu">☰</button>
+        <button class="hud-btn" id="btn-inventory" title="Ekwipunek (I)" data-icon="backpack" data-size="24"></button>
+        <button class="hud-btn" id="btn-quests" title="Zadania (J)" data-icon="scroll" data-size="24"></button>
+        <button class="hud-btn" id="btn-menu" title="Menu (Esc)" data-icon="menu" data-size="24"></button>
+        <button class="hud-btn" id="btn-fullscreen" title="Pełny ekran" data-icon="expand" data-size="22"></button>
       </div>
 
-      <!-- Dotykowe -->
+      <div id="quick-slots" class="hidden">
+        <button class="quick-btn" id="btn-potion" title="Mikstura (R)" data-icon="potion" data-size="23"></button>
+        <button class="quick-btn" id="btn-spell" title="Kula ognia (F)" data-icon="flame" data-size="23"></button>
+        <button class="quick-btn" id="btn-torch" title="Pochodnia (T)" data-icon="torch" data-size="23"></button>
+        <button class="quick-btn" id="btn-horse" title="Koń (H)" data-icon="horse" data-size="23"></button>
+      </div>
+
       <div id="touch-controls" class="hidden">
         <div id="joy-zone"><div id="joy-base"><div id="joy-stick"></div></div></div>
         <div id="look-zone"></div>
         <div id="touch-buttons">
-          <button id="btn-attack">⚔️</button>
-          <button id="btn-interact">💬</button>
+          <button id="btn-attack" data-icon="sword" data-size="28"></button>
+          <button id="btn-interact" data-icon="bubble" data-size="28"></button>
         </div>
       </div>
     </div>
@@ -110,6 +155,7 @@
     <div id="shop" class="overlay full hidden">
       <div class="menu-panel shop-panel">
         <h2 id="shop-title">Sklep</h2>
+        <p id="shop-desc"></p>
         <div id="shop-gold"></div>
         <div class="shop-list" id="shop-list"></div>
         <button class="btn ghost" id="btn-shop-close">Zamknij</button>
@@ -118,45 +164,93 @@
 
     <!-- EKWIPUNEK -->
     <div id="inventory" class="overlay full hidden">
-      <div class="menu-panel">
-        <h2>🎒 Ekwipunek</h2>
+      <div class="menu-panel wide">
+        <h2>Ekwipunek</h2>
         <div id="inv-stats"></div>
-        <div class="inv-grid" id="inv-grid"></div>
-        <button class="btn ghost" id="btn-inventory-close">Zamknij</button>
+        <div class="inv-cols">
+          <div>
+            <h3>Założone</h3>
+            <div id="equip-slots"></div>
+          </div>
+          <div>
+            <h3>Plecak</h3>
+            <div class="inv-grid" id="inv-grid"></div>
+          </div>
+        </div>
+        <div id="inv-tip">Kliknij przedmiot, aby go użyć / założyć. Mikstury leczą, prowiant regeneruje siły.</div>
+        <button class="btn ghost" id="btn-inventory-close">Zamknij (I)</button>
       </div>
     </div>
 
     <!-- ZADANIA -->
     <div id="quests-panel" class="overlay full hidden">
-      <div class="menu-panel">
-        <h2>📜 Zadania</h2>
+      <div class="menu-panel wide">
+        <h2>Dziennik zadań</h2>
         <div id="quests-list"></div>
-        <button class="btn ghost" id="btn-quests-close">Zamknij</button>
+        <button class="btn ghost" id="btn-quests-close">Zamknij (J)</button>
+      </div>
+    </div>
+
+    <!-- PAUZA -->
+    <div id="pause-menu" class="overlay full hidden">
+      <div class="menu-panel">
+        <h2>Pauza</h2>
+        <p id="pause-info"></p>
+        <button class="btn primary" id="btn-resume">Wróć do gry</button>
+        <button class="btn" id="btn-save">Zapisz grę</button>
+        <button class="btn" id="btn-mute"><span class="btn-ic" id="mute-ic" data-icon="sound" data-size="18"></span><span id="mute-label">Dźwięk: włączony</span></button>
+        <div class="quality-row">
+          <label for="quality2">Jakość</label>
+          <select id="quality2">
+            <option value="low">Niska</option>
+            <option value="medium">Średnia</option>
+            <option value="high">Wysoka</option>
+            <option value="ultra">Ultra</option>
+          </select>
+        </div>
+        <button class="btn ghost" id="btn-pause-help">Pomoc</button>
+        <button class="btn ghost" id="btn-pause-tutorial">Samouczek</button>
+        <button class="btn danger" id="btn-quit">Wyjdź do menu</button>
       </div>
     </div>
 
     <!-- ŚMIERĆ -->
     <div id="death-screen" class="overlay full hidden">
       <div class="menu-panel">
-        <h2 class="death-title">⚔️ Zostałeś pokonany</h2>
-        <p>Królestwo potrzebuje swojego rycerza. Odrodzisz się w zamku.</p>
-        <button class="btn primary" id="btn-respawn">Odzyskaj siły</button>
+        <h2 class="death-title">Poległeś w boju…</h2>
+        <p>Królestwo wciąż potrzebuje swojego rycerza.<br />Obudzisz się w swojej komnacie w zamku.</p>
+        <button class="btn primary big" id="btn-respawn">Powstań ponownie</button>
       </div>
     </div>
 
-    <!-- TOASTY -->
+    <!-- ZWYCIĘSTWO / FINAŁ -->
+    <div id="finale-screen" class="overlay full hidden">
+      <div class="menu-panel">
+        <h2 class="gold-title">Chwała bohaterowi!</h2>
+        <p id="finale-text"></p>
+        <button class="btn primary big" id="btn-finale-close">Kontynuuj przygodę</button>
+      </div>
+    </div>
+
+    <!-- SAMOUCZEK -->
+    <div id="tutorial-screen" class="overlay full hidden">
+      <div class="menu-panel tut-panel">
+        <div id="tut-icon" class="tut-icon"></div>
+        <h2 id="tut-title"></h2>
+        <p id="tut-text"></p>
+        <div id="tut-dots"></div>
+        <div class="tut-buttons">
+          <button id="tut-prev" class="btn ghost">Wstecz</button>
+          <button id="tut-skip" class="btn ghost">Pomiń</button>
+          <button id="tut-next" class="btn primary">Dalej</button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast-container"></div>
-
-    <div id="loading-screen" class="overlay full hidden">
-      <div class="loading-inner">
-        <div class="loading-emblem">🛡️</div>
-        <h1>DREAM KNIGHT</h1>
-        <div class="loading-bar"><div id="loading-fill"></div></div>
-        <p id="loading-text">Ładowanie królestwa…</p>
-      </div>
-    </div>
+    <div id="damage-vignette"></div>
+    <div id="fade-veil"></div>
   </div>
-
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

@@ -5,7 +5,10 @@ export default defineConfig({
     host: '0.0.0.0',
     allowedHosts: ['.e2b.app'],
   },
+  preview: {
+    host: '0.0.0.0',
+  },
   build: {
-    chunkSizeWarningLimit: 900,
+    chunkSizeWarningLimit: 1200,
   },
 });
