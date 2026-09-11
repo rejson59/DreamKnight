@@ -22,6 +22,17 @@ npm run build    # wersja produkcyjna
 npm run preview  # podgląd buildu
 ```
 
+## 🌐 GitHub Pages
+
+Strona wdraża się automatycznie na GitHub Pages przy każdym pushu do gałęzi
+`main` (workflow `.github/workflows/deploy.yml`, źródło Pages: **GitHub Actions**).
+
+- Adres strony: <https://rejson59.github.io/DreamKnight/>
+- Deploy można też uruchomić ręcznie: zakładka **Actions → Deploy to GitHub Pages → Run workflow**
+
+Build używa relatywnych ścieżek (`base: './'` w `vite.config.js`), więc działa
+pod podkatalogiem repozytorium niezależnie od jego nazwy.
+
 ## 🎮 Sterowanie
 
 **PC:** WASD + mysz (kliknij ekran, by złapać kursor), LPM — atak, E — interakcja,
