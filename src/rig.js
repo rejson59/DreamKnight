@@ -213,14 +213,18 @@ export function createHumanoid(o = {}) {
   for (const sx of [-1, 1]) {
     const ear = sph(0.045, skin, 6, 6); ear.position.set(sx * 0.2, 0.22, 0); neck.add(ear);
   }
-  // Oczy: białko + źrenica
+  // Oczy: białko + tęczówka + źrenica (zapamiętane do mrugania)
   const whiteM = mat(0xf2ede2, { roughness: 0.25 });
   const pupilM = o.glowingEyes ? mat(0xff2222, { emissive: 0xcc0000, emissiveIntensity: 2 }) : mat(0x201510, { roughness: 0.2 });
+  const irisM = o.glowingEyes ? pupilM : mat(o.eyeColor ?? 0x4a2c14, { roughness: 0.3 });
+  const eyeMeshes = [];
   for (const sx of [-1, 1]) {
     const w = new THREE.Mesh(sphGeo(o.glowingEyes ? 0.045 : 0.042, 8, 8), whiteM);
-    w.position.set(sx * 0.082, 0.26, 0.175); neck.add(w);
+    w.position.set(sx * 0.082, 0.26, 0.175); neck.add(w); eyeMeshes.push(w);
+    const iris = new THREE.Mesh(sphGeo(0.03, 8, 8), irisM);
+    iris.position.set(sx * 0.082, 0.26, 0.19); neck.add(iris); eyeMeshes.push(iris);
     const p = new THREE.Mesh(sphGeo(o.glowingEyes ? 0.024 : 0.02, 6, 6), pupilM);
-    p.position.set(sx * 0.082, 0.26, 0.21); neck.add(p);
+    p.position.set(sx * 0.082, 0.26, 0.21); neck.add(p); eyeMeshes.push(p);
     // brew
     const brow = box(0.07, 0.018, 0.02, mat(o.hair ?? 0x3a2a1a));
     brow.position.set(sx * 0.082, 0.325, 0.185); brow.rotation.z = -sx * 0.12; neck.add(brow);
@@ -301,6 +305,14 @@ export function createHumanoid(o = {}) {
   const rig = {
     group: g, hips, neck, armL, armR, legL, legR, cape, weaponMesh, handR,
     walkPhase: Math.random() * 10,
+    blinkOff: Math.random() * 10,
+    alive(t) { // mruganie + oddech — wołane co klatkę
+      const bl = (t + this.blinkOff) % 4.1;
+      const shut = bl < 0.13 ? 0.1 : 1;
+      for (const e of eyeMeshes) e.scale.y = shut;
+      const b = 1 + Math.sin(t * 1.7 + this.blinkOff) * 0.02;
+      torso.scale.set(b, 1, b);
+    },
     reset() {
       legL.rotation.set(0, 0, 0); legR.rotation.set(0, 0, 0);
       armL.rotation.set(0, 0, 0); armR.rotation.set(0, 0, 0);

@@ -2248,6 +2248,9 @@ export class World {
     this.particleF = q.particles;
     if (this.grassMesh) this.grassMesh.count = Math.min(this.grassTotal, q.grass);
     if (this.treeMeshes) this.treeMeshes.forEach((m, i) => { m.count = Math.max(10, (this.treeCounts[i] * q.trees) | 0); });
+    this._grassBase = Math.min(this.grassTotal || 0, q.grass);
+    this._treeBase = (this.treeCounts || []).map((c) => Math.max(10, (c * q.trees) | 0));
+    if (this._vegScale) this.setVegScale(this._vegScale);
     if (this.sun) this.setShadow(q.extent, q.shadow);
     this.clouds.forEach((c, i) => { c.s.visible = i < q.clouds; });
     if (this.lights.wizard) this.lights.wizard.visible = name !== 'low';
@@ -2260,6 +2263,13 @@ export class World {
       if (e === this.rain) e.setCount(q.rain);
       else e.setCount(e.count * Math.min(1, q.particles));
     }
+  }
+
+  // Gubernator FPS: płynne skalowanie gęstości roślinności (0.3..1)
+  setVegScale(f) {
+    this._vegScale = f;
+    if (this.grassMesh && this._grassBase) this.grassMesh.count = Math.max(300, (this._grassBase * f) | 0);
+    if (this.treeMeshes && this._treeBase) this.treeMeshes.forEach((m, i) => { m.count = Math.max(10, (this._treeBase[i] * f) | 0); });
   }
 
   // ---------- AKTUALIZACJA ----------

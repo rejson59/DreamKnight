@@ -372,6 +372,7 @@ export class CreatureManager {
 
     for (const e of this.enemies) {
       const g = e.rig.group;
+      if (!e.dead && e.rig.alive) e.rig.alive(t);
       if (e.dead) {
         e.deadT += dt;
         if (e.deadT > 2) g.position.y -= dt * 0.5;

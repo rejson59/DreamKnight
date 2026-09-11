@@ -39,6 +39,7 @@ const P = {
   mute: '<path d="M4 9.5v5h3.5L13 19V5L7.5 9.5z" fill="currentColor" stroke="none"/><path d="M16 9.5l5.5 5.5M21.5 9.5L16 15"/>',
   wind: '<path d="M3 8.5h11a3 3 0 10-3-3M3 12.5h15a3 3 0 11-3 3M3 16.5h8"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  expand: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
   check: '<path d="M4.5 12.5l5 5L19.5 7"/>',
   hourglass: '<path d="M6 3.5h12M6 20.5h12M8 3.5v4l4 4 4-4v-4M8 20.5v-4l4-4 4 4v4"/>',
 };

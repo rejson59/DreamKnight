@@ -9,13 +9,13 @@ export const NPC_DEFS = [
   {
     id: 'king', name: 'Król Aldric', title: 'Władca Królestwa',
     x: 0, z: -58.2, rotY: 0,
-    rig: { skin: 0xd9a066, shirt: 0x8f1f1f, pants: 0x2a2a3a, crown: true, robe: 0x7a1010, beard: 0xcccccc },
+    rig: { skin: 0xd9a066, shirt: 0x8f1f1f, pants: 0x2a2a3a, crown: true, robe: 0x7a1010, beard: 0xcccccc, eyeColor: 0x5a3a1a },
     static: true,
   },
   {
     id: 'wizard', name: 'Eldrin Mędrzec', title: 'Czarodziej, przyjaciel rycerza',
     x: 28, z: -12.5, rotY: Math.PI,
-    rig: { skin: 0xc99060, shirt: 0x2a3a6b, pants: 0x2a3a6b, wizardHat: true, beard: 0xe8e8e8, staff: true, robe: 0x2a3a6b },
+    rig: { skin: 0xc99060, shirt: 0x2a3a6b, pants: 0x2a3a6b, wizardHat: true, beard: 0xe8e8e8, staff: true, robe: 0x2a3a6b, eyeColor: 0x6a7a8a },
     static: true,
   },
   {
@@ -27,19 +27,19 @@ export const NPC_DEFS = [
   {
     id: 'stablemaster', name: 'Hilda', title: 'Stajenna',
     x: -29, z: 19, rotY: Math.PI / 2,
-    rig: { skin: 0xd9a066, shirt: 0x3a6b3a, pants: 0x4a3a28, female: true, hair: 0x8a4a1a },
+    rig: { skin: 0xd9a066, shirt: 0x3a6b3a, pants: 0x4a3a28, female: true, hair: 0x8a4a1a, eyeColor: 0x2a5a2a },
     static: true,
   },
   {
     id: 'innkeeper', name: 'Berta', title: 'Karczmarka',
     x: -19.5, z: -18.5, rotY: Math.PI,
-    rig: { skin: 0xe0aa72, shirt: 0x8f5a2a, pants: 0x5a3a2a, female: true, hair: 0x4a2a10 },
+    rig: { skin: 0xe0aa72, shirt: 0x8f5a2a, pants: 0x5a3a2a, female: true, hair: 0x4a2a10, eyeColor: 0x5a3a1a },
     static: true,
   },
   {
     id: 'merchant_aldona', name: 'Aldona', title: 'Kupczyni',
     x: -14, z: 4.5, rotY: Math.PI,
-    rig: { skin: 0xd9a066, shirt: 0x6b2a6b, pants: 0x3a3040, female: true, hair: 0x2a1a0a, hood: 0x6b2a6b },
+    rig: { skin: 0xd9a066, shirt: 0x6b2a6b, pants: 0x3a3040, female: true, hair: 0x2a1a0a, hood: 0x6b2a6b, eyeColor: 0x3a2a5a },
     static: true,
   },
   {
@@ -138,6 +138,7 @@ export class NPCManager {
   update(dt, t, playerPos) {
     for (const n of this.npcs) {
       const rig = n.rig;
+      rig.alive?.(t);
       const dx = playerPos.x - rig.group.position.x;
       const dz = playerPos.z - rig.group.position.z;
       const d = Math.hypot(dx, dz);

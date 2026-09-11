@@ -32,6 +32,7 @@ export class Game {
     this.t = 0;
     this.zone = 'kingdom';
     this.fpsAcc = 0; this.fpsN = 0; this.fpsT = 0;
+    this.govAcc = 0; this.govN = 0; this.govT = 0; this.dynScale = 1;
     this.hintCd = 0;
     this.chestLooted = { bed: false, goblin: false, cave: false };
     this.cutsceneActive = false;
@@ -124,6 +125,7 @@ export class Game {
   setQuality(name) {
     this.quality = name;
     this.autoQuality = false;
+    this.dynScale = 1;
     this.applyQuality(name);
     const q2 = document.getElementById('quality2');
     if (q2) q2.value = name;
@@ -131,7 +133,8 @@ export class Game {
 
   applyQuality(name) {
     const q = QUALITY_PRESETS[name] || QUALITY_PRESETS.medium;
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, q.pixelRatio));
+    this._basePR = Math.min(devicePixelRatio || 1, q.pixelRatio);
+    this.renderer.setPixelRatio(this._basePR * (this.dynScale || 1));
     this.world.applyQuality(name);
     if (this.fx) this.fx.setQuality(name);
     this.scene.fog.far = q.viewDistance + 200;
@@ -140,22 +143,50 @@ export class Game {
   }
 
   autoPerf(dt) {
-    if (!this.autoQuality) return;
     this.fpsAcc += dt; this.fpsN++; this.fpsT += dt;
+    this.govAcc += dt; this.govN++; this.govT += dt;
+    // szybki gubernator: licznik FPS + dynamiczna rozdzielczość co 2 s
+    if (this.govT > 2) {
+      const fps = this.govN / Math.max(0.001, this.govAcc);
+      this.ui.setFps(fps);
+      if (this.autoQuality) {
+        if (fps < 42 && this.dynScale > 0.55) {
+          this.dynScale = Math.max(0.55, this.dynScale - 0.12);
+          this.applyDynScale();
+        } else if (fps > 57 && this.dynScale < 1) {
+          this.dynScale = Math.min(1, this.dynScale + 0.08);
+          this.applyDynScale();
+        }
+      }
+      this.govAcc = 0; this.govN = 0; this.govT = 0;
+    }
+    if (!this.autoQuality) {
+      if (this.fpsT > 4) { this.fpsAcc = 0; this.fpsN = 0; this.fpsT = 0; }
+      return;
+    }
+    // wolny nadzór: zmiana presetu co 6 s (ostatnia deska ratunku)
     if (this.fpsT > 6) {
       const fps = this.fpsN / this.fpsAcc;
       const order = ['low', 'medium', 'high', 'ultra'];
       const i = order.indexOf(this.quality);
       if (fps < 32 && i > 0) {
         this.quality = order[i - 1];
+        this.dynScale = 0.8;
         this.applyQuality(this.quality);
         this.ui.toast(`Dostosowano jakość do: ${this.quality} (płynność)`);
       } else if (fps > 55 && i < order.indexOf(this._autoMax || 'high')) {
         this.quality = order[i + 1];
+        this.dynScale = 1;
         this.applyQuality(this.quality);
       }
       this.fpsAcc = 0; this.fpsN = 0; this.fpsT = 0;
     }
+  }
+
+  // Aplikuje dynamiczną skalę rozdzielczości + gęstość roślinności
+  applyDynScale() {
+    if (this._basePR) this.renderer.setPixelRatio(this._basePR * this.dynScale);
+    if (this.world.setVegScale) this.world.setVegScale(0.55 + 0.45 * this.dynScale);
   }
 
   // ---------- START / PAUZA / KONIEC ----------

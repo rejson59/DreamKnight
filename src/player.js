@@ -179,6 +179,7 @@ export class Player {
   update(dt, ctx) {
     const { input, camera, game } = ctx;
     const dead = this.dead;
+    this.rig.alive?.(ctx.t);
     this.hurtT = Math.max(0, this.hurtT - dt);
     if (this.atkCd > 0) this.atkCd -= dt;
     if (this.comboWindow > 0) { this.comboWindow -= dt; if (this.comboWindow <= 0) this.combo = 0; }

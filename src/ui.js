@@ -23,6 +23,13 @@ export class UI {
     $('btn-inventory').onclick = () => { this.game.audio.play('click'); this.toggleInventory(); };
     $('btn-quests').onclick = () => { this.game.audio.play('click'); this.toggleQuests(); };
     $('btn-menu').onclick = () => { this.game.audio.play('click'); this.game.pause(); };
+    const fsBtn = $('btn-fullscreen');
+    if (!document.fullscreenEnabled) fsBtn.style.display = 'none';
+    else fsBtn.onclick = () => {
+      this.game.audio.play('click');
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen?.().catch(() => {});
+    };
     $('btn-inventory-close').onclick = () => this.toggleInventory(false);
     $('btn-quests-close').onclick = () => this.toggleQuests(false);
     $('btn-shop-close').onclick = () => this.closeShop();
@@ -195,6 +202,13 @@ export class UI {
     while (box.children.length > 4) box.removeChild(box.firstChild);
     setTimeout(() => d.classList.add('fade'), 2600);
     setTimeout(() => d.remove(), 3200);
+  }
+
+  setFps(fps) {
+    const el = $('fps-counter');
+    const f = Math.round(fps);
+    el.textContent = `${f} FPS`;
+    el.className = f < 30 ? 'fps-low' : f < 50 ? 'fps-mid' : 'fps-good';
   }
 
   showBoss(name, frac) {
