@@ -210,6 +210,7 @@ export class World {
     this.buildVegetation();
     this.buildParticles();
     this.buildPickups();
+    this.buildAmbientLife();
     this.applyQuality(quality);
   }
 
@@ -2024,7 +2025,10 @@ export class World {
       dummy.rotation.y = rand(0, 3);
       dummy.updateMatrix();
       grass.setMatrixAt(gi, dummy.matrix);
-      grass.setColorAt(gi, col.setHSL(0.24 + Math.random() * 0.05, 0.5, 0.3 + Math.random() * 0.15));
+      if (dist(x, z, LOC.forest.x, LOC.forest.z) < 110) col.setHSL(0.3, 0.45, 0.2 + Math.random() * 0.1);
+      else if (h > 16) col.setHSL(0.14 + Math.random() * 0.03, 0.45, 0.3 + Math.random() * 0.12);
+      else col.setHSL(0.24 + Math.random() * 0.05, 0.5, 0.3 + Math.random() * 0.15);
+      grass.setColorAt(gi, col);
       gi++;
     }
     grass.count = gi;
@@ -2405,6 +2409,10 @@ export class World {
     gMeshes.forEach((g, i) => { g.count = Math.min(gTotals[i] || 0, ((q.grass || 0) * (gShares[i] ?? 1)) | 0); });
     if (this.treeMeshes) this.treeMeshes.forEach((m, i) => { m.count = Math.max(10, (this.treeCounts[i] * q.trees) | 0); });
     this._grassBase = gMeshes.map((g, i) => Math.min(gTotals[i] || 0, ((q.grass || 0) * (gShares[i] ?? 1)) | 0));
+    if (this.ambientMeshes) {
+      const af = Math.min(1, q.particles ?? 1);
+      for (const a of this.ambientMeshes) a.m.count = a.base <= 0 ? 0 : Math.min(a.base, Math.max((a.base * af) | 0, Math.min(4, a.base)));
+    }
     this._treeBase = (this.treeCounts || []).map((c) => Math.max(10, (c * q.trees) | 0));
     if (this._vegScale) this.setVegScale(this._vegScale);
     if (this.sun) this.setShadow(q.extent, q.shadow);
@@ -2432,6 +2440,306 @@ export class World {
     if (this.treeMeshes && this._treeBase) this.treeMeshes.forEach((m, i) => { m.count = Math.max(10, (this._treeBase[i] * f) | 0); });
   }
 
+  // ---------- ŻYWE POWIETRZE: motyle, ważki, króliki, mgła, tęcza, meteory ----------
+  buildAmbientLife() {
+    this.ambientMeshes = [];
+    const regAmb = (m, base) => { this.ambientMeshes.push({ m, base }); };
+    // Motyle — łąki w dzień (2 skrzydła + tułów, instancje)
+    const wingG = new THREE.PlaneGeometry(0.3, 0.24);
+    wingG.translate(0.15, 0, 0);
+    const wingM = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+    const NB = 30;
+    this.bflies = [];
+    {
+      let g = 0;
+      while (this.bflies.length < NB && g++ < 2000) {
+        const x = rand(-260, 260), z = rand(-110, 280);
+        if (!this.scatterOK(x, z)) continue;
+        const h = groundHeight(x, z);
+        if (h > 14 || h < WATER_Y + 0.6) continue;
+        if (dist(x, z, LOC.forest.x, LOC.forest.z) < 100) continue;
+        this.bflies.push({ hx: x, hz: z, hy: h + rand(1, 2.4), r: rand(4, 11), sp: rand(0.25, 0.6), ph: rand(0, 9), s: rand(0.8, 1.3) });
+      }
+    }
+    const mkWings = () => {
+      const im = new THREE.InstancedMesh(wingG, wingM, Math.max(1, this.bflies.length));
+      im.frustumCulled = false;
+      this.scene.add(im);
+      return im;
+    };
+    this.bflyL = mkWings(); this.bflyR = mkWings();
+    {
+      const c = new THREE.Color();
+      const bcols = [0xff8ac2, 0xffd94d, 0x7ac8ff, 0xffffff, 0xff9a5e, 0xc07aff];
+      this.bflies.forEach((b, i) => {
+        c.set(bcols[(Math.random() * bcols.length) | 0]);
+        this.bflyL.setColorAt(i, c);
+        this.bflyR.setColorAt(i, c);
+      });
+      if (this.bflyL.instanceColor) this.bflyL.instanceColor.needsUpdate = true;
+      if (this.bflyR.instanceColor) this.bflyR.instanceColor.needsUpdate = true;
+    }
+    const bodyG = new THREE.CylinderGeometry(0.025, 0.025, 0.3, 5);
+    bodyG.rotateX(Math.PI / 2);
+    this.bflyB = new THREE.InstancedMesh(bodyG, new THREE.MeshBasicMaterial({ color: 0x2a2a2a }), Math.max(1, this.bflies.length));
+    this.bflyB.frustumCulled = false;
+    this.scene.add(this.bflyB);
+    regAmb(this.bflyL, this.bflies.length); regAmb(this.bflyR, this.bflies.length); regAmb(this.bflyB, this.bflies.length);
+    this._mB = new THREE.Matrix4(); this._mR = new THREE.Matrix4(); this._mF = new THREE.Matrix4(); this._mW = new THREE.Matrix4();
+    // Ważki nad stawem
+    const ND = 7;
+    this.dflies = [];
+    for (let i = 0; i < ND; i++) {
+      const a = (i / ND) * Math.PI * 2;
+      this.dflies.push({ hx: LOC.forestPond.x + Math.cos(a) * rand(6, 16), hz: LOC.forestPond.z + Math.sin(a) * rand(6, 16), r: rand(3, 7), sp: rand(0.8, 1.4), ph: rand(0, 9) });
+    }
+    const dbG = new THREE.ConeGeometry(0.05, 0.55, 6);
+    dbG.rotateX(Math.PI / 2);
+    this.dflyB = new THREE.InstancedMesh(dbG, new THREE.MeshBasicMaterial(), Math.max(1, ND));
+    const dwG = new THREE.PlaneGeometry(0.55, 0.14);
+    this.dflyW = new THREE.InstancedMesh(dwG, new THREE.MeshBasicMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }), Math.max(1, ND));
+    this.dflyB.frustumCulled = this.dflyW.frustumCulled = false;
+    {
+      const c = new THREE.Color();
+      const dcols = [0x35d0ff, 0x4d7aff, 0x35ffa8];
+      this.dflies.forEach((d, i) => this.dflyB.setColorAt(i, c.set(dcols[i % dcols.length])));
+      if (this.dflyB.instanceColor) this.dflyB.instanceColor.needsUpdate = true;
+    }
+    this.scene.add(this.dflyB); this.scene.add(this.dflyW);
+    regAmb(this.dflyB, ND); regAmb(this.dflyW, ND);
+    // Króliki — łąki (uciekają przed graczem)
+    const NR = 8;
+    this.rabbits = [];
+    {
+      let g = 0;
+      while (this.rabbits.length < NR && g++ < 1500) {
+        const x = rand(-220, 220), z = rand(-60, 260);
+        if (!this.scatterOK(x, z)) continue;
+        const h = groundHeight(x, z);
+        if (h > 12 || h < WATER_Y + 0.6) continue;
+        this.rabbits.push({ x, z, y: h, hd: rand(0, 6.28), sp: 0, hop: rand(0, 9), s: rand(0.8, 1.2) });
+      }
+    }
+    const rbG = new THREE.SphereGeometry(0.28, 8, 6); rbG.scale(1, 0.85, 1.3);
+    const rhG = new THREE.SphereGeometry(0.17, 8, 6);
+    const reG = new THREE.ConeGeometry(0.06, 0.34, 6); reG.translate(0, 0.17, 0);
+    const rabM = new THREE.MeshStandardMaterial({ roughness: 1 });
+    this.rabB = new THREE.InstancedMesh(rbG, rabM, Math.max(1, NR));
+    this.rabH = new THREE.InstancedMesh(rhG, rabM, Math.max(1, NR));
+    this.rabE = new THREE.InstancedMesh(reG, rabM, Math.max(1, NR * 2));
+    this.rabB.frustumCulled = this.rabH.frustumCulled = this.rabE.frustumCulled = false;
+    {
+      const c = new THREE.Color();
+      const rcols = [0xb0a090, 0x8a7a6a, 0xd8d0c0, 0x6a5a4a];
+      this.rabbits.forEach((r, i) => {
+        c.set(rcols[(Math.random() * rcols.length) | 0]);
+        this.rabB.setColorAt(i, c); this.rabH.setColorAt(i, c);
+        this.rabE.setColorAt(i * 2, c); this.rabE.setColorAt(i * 2 + 1, c);
+      });
+      for (const m of [this.rabB, this.rabH, this.rabE]) if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    }
+    this.rabB.castShadow = true;
+    this.scene.add(this.rabB); this.scene.add(this.rabH); this.scene.add(this.rabE);
+    // Poranna mgła nad stawem
+    this.mists = [];
+    for (let i = 0; i < 4; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.T.soft, color: 0xd8e8f0, transparent: true, opacity: 0, depthWrite: false }));
+      const a = rand(0, 6.28), rr = rand(3, 12);
+      s.position.set(LOC.forestPond.x + Math.cos(a) * rr, WATER_Y + rand(1, 2.6), LOC.forestPond.z + Math.sin(a) * rr);
+      s.scale.set(rand(16, 26), rand(6, 10), 1);
+      s.visible = false;
+      this.scene.add(s);
+      this.mists.push({ s, bx: s.position.x, bz: s.position.z, ph: rand(0, 9) });
+    }
+    // Tęcza po deszczu
+    const rc = document.createElement('canvas'); rc.width = 256; rc.height = 128;
+    const rctx = rc.getContext('2d');
+    for (const [i, cc] of ['#ff5a5a', '#ff9a3d', '#ffe74d', '#5ad86a', '#4d9aff', '#9a5ae0'].entries()) {
+      rctx.beginPath();
+      rctx.strokeStyle = cc; rctx.lineWidth = 9;
+      rctx.arc(128, 128, 112 - i * 9, Math.PI, 0);
+      rctx.stroke();
+    }
+    this.rainbow = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(rc), transparent: true, opacity: 0, depthWrite: false, fog: false }));
+    this.rainbow.scale.set(340, 170, 1);
+    this.rainbow.visible = false;
+    this.scene.add(this.rainbow);
+    this.rainbowT = 0;
+    // Spadająca gwiazda
+    this.shoot = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.T.soft, color: 0xcfe8ff, transparent: true, opacity: 0, depthWrite: false, fog: false, rotation: -0.6 }));
+    this.shoot.scale.set(34, 3.2, 1);
+    this.shoot.visible = false;
+    this.scene.add(this.shoot);
+    this.shootT = rand(3, 10); this.shootK = -1;
+    this._shootFrom = new THREE.Vector3(); this._shootTo = new THREE.Vector3();
+    // Opadające liście + magiczne płatki (skalowane z cząsteczkami)
+    const P = (n) => Math.max(10, (n * this.particleF) | 0);
+    this.emitters.push(new Emitter(this.scene, this.T.soft, P(70), {
+      size: 0.45, color: 0x7aa84e, opacity: 0.9, gravity: -0.9, drag: 0.8,
+      spawner: (e, i) => {
+        const j = i * 3;
+        const a = rand(0, 6.28), r = Math.pow(Math.random(), 0.6) * 90;
+        const lx = LOC.forest.x + Math.cos(a) * r, lz = LOC.forest.z + Math.sin(a) * r * 0.85;
+        e.pos[j] = lx; e.pos[j + 1] = groundHeight(lx, lz) + rand(3, 9); e.pos[j + 2] = lz;
+        e.vel[j] = rand(-0.6, 0.6); e.vel[j + 1] = rand(-0.4, 0); e.vel[j + 2] = rand(-0.6, 0.6);
+        e.maxLife[i] = e.life[i] = rand(3, 7);
+      },
+    }));
+    this.emitters.push(new Emitter(this.scene, this.T.soft, P(50), {
+      size: 0.35, color: 0x6ae0ff, opacity: 0.85, gravity: 0.55, drag: 1, additive: true,
+      spawner: (e, i) => {
+        const j = i * 3;
+        const a = rand(0, 6.28), r = Math.pow(Math.random(), 0.6) * 70;
+        const lx = LOC.forest.x + Math.cos(a) * r, lz = LOC.forest.z + Math.sin(a) * r * 0.85;
+        e.pos[j] = lx; e.pos[j + 1] = groundHeight(lx, lz) + rand(0.5, 3); e.pos[j + 2] = lz;
+        e.vel[j] = rand(-0.4, 0.4); e.vel[j + 1] = rand(0.1, 0.4); e.vel[j + 2] = rand(-0.4, 0.4);
+        e.maxLife[i] = e.life[i] = rand(2.5, 5);
+      },
+    }));
+  }
+
+  updateAmbient(dt, t, playerPos, dayF, duskF, raining, sunH, sd) {
+    const px = playerPos ? playerPos.x : 0, pz = playerPos ? playerPos.z : 0;
+    const dummy = this._ambDummy || (this._ambDummy = new THREE.Object3D());
+    const v3 = this._v3 || (this._v3 = new THREE.Vector3());
+    // Motyle (dzień, bez deszczu)
+    const bflyOn = dayF > 0.35 && !raining;
+    this.bflyL.visible = this.bflyR.visible = this.bflyB.visible = bflyOn;
+    if (bflyOn) {
+      const n = this.bflyL.count;
+      for (let i = 0; i < n; i++) {
+        const b = this.bflies[i];
+        const a1 = t * b.sp + b.ph, a2 = t * b.sp * 1.7 + b.ph * 2;
+        const x = b.hx + Math.cos(a1) * b.r, z = b.hz + Math.sin(a2) * b.r;
+        const y = b.hy + Math.sin(t * 1.3 + b.ph) * 0.5;
+        const hd = Math.atan2(-Math.sin(a1) * b.sp, Math.cos(a2) * b.sp * 1.7);
+        const f = 0.15 + (Math.sin(t * 16 + b.ph * 3) * 0.5 + 0.5) * 1.1;
+        this._mB.makeRotationY(hd); this._mB.setPosition(x, y, z);
+        v3.set(b.s, b.s, b.s); this._mB.scale(v3);
+        this._mF.makeRotationZ(f);
+        this._mW.multiplyMatrices(this._mB, this._mF);
+        this.bflyL.setMatrixAt(i, this._mW);
+        this._mR.makeRotationY(Math.PI);
+        this._mR.multiply(this._mF);
+        this._mW.multiplyMatrices(this._mB, this._mR);
+        this.bflyR.setMatrixAt(i, this._mW);
+        dummy.position.set(x, y, z); dummy.rotation.set(0, hd, 0); dummy.scale.setScalar(b.s);
+        dummy.updateMatrix();
+        this.bflyB.setMatrixAt(i, dummy.matrix);
+      }
+      this.bflyL.instanceMatrix.needsUpdate = true;
+      this.bflyR.instanceMatrix.needsUpdate = true;
+      this.bflyB.instanceMatrix.needsUpdate = true;
+    }
+    // Ważki (dzień, bez deszczu)
+    const dflyOn = dayF > 0.35 && !raining;
+    this.dflyB.visible = this.dflyW.visible = dflyOn;
+    if (dflyOn) {
+      const n = this.dflyB.count;
+      for (let i = 0; i < n; i++) {
+        const d = this.dflies[i];
+        const a1 = t * d.sp + d.ph, a2 = t * d.sp * 2.3 + d.ph;
+        const x = d.hx + Math.cos(a1) * d.r, z = d.hz + Math.sin(a2) * d.r;
+        const y = WATER_Y + 1.1 + Math.sin(t * 2.2 + d.ph) * 0.5;
+        dummy.position.set(x, y, z);
+        dummy.rotation.set(0, Math.atan2(-Math.sin(a1), Math.cos(a2) * 2.3), 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        this.dflyB.setMatrixAt(i, dummy.matrix);
+        dummy.scale.set(0.6 + (Math.sin(t * 42 + d.ph * 5) * 0.5 + 0.5) * 0.5, 1, 1);
+        dummy.updateMatrix();
+        this.dflyW.setMatrixAt(i, dummy.matrix);
+      }
+      this.dflyB.instanceMatrix.needsUpdate = true;
+      this.dflyW.instanceMatrix.needsUpdate = true;
+    }
+    // Króliki
+    {
+      const n = this.rabbits.length;
+      for (let i = 0; i < n; i++) {
+        const r = this.rabbits[i];
+        const dx = r.x - px, dz = r.z - pz;
+        const flee = Math.hypot(dx, dz) < 8;
+        const want = flee ? 3.6 : (Math.sin(t * 0.4 + r.hop) > 0.55 ? 1.1 : 0);
+        r.sp += (want - r.sp) * Math.min(1, dt * 3);
+        if (flee) {
+          const away = Math.atan2(dx, dz);
+          let dh = away - r.hd;
+          while (dh > Math.PI) dh -= Math.PI * 2;
+          while (dh < -Math.PI) dh += Math.PI * 2;
+          r.hd += dh * Math.min(1, dt * 6);
+        } else {
+          r.hd += Math.sin(t * 0.7 + r.hop * 2) * dt * 0.8;
+        }
+        r.hop += dt * (2 + r.sp * 3);
+        const nx = r.x + Math.sin(r.hd) * r.sp * dt, nz = r.z + Math.cos(r.hd) * r.sp * dt;
+        const nh = groundHeight(nx, nz);
+        if (this.scatterOK(nx, nz) && nh < 14 && nh > WATER_Y + 0.4) { r.x = nx; r.z = nz; r.y = nh; }
+        else r.hd += Math.PI * 0.5;
+        const hopY = Math.abs(Math.sin(r.hop)) * 0.45 * Math.min(1, r.sp);
+        const fx = Math.sin(r.hd), fz = Math.cos(r.hd);
+        dummy.rotation.set(0, r.hd, 0); dummy.scale.setScalar(r.s);
+        dummy.position.set(r.x, r.y + 0.3 * r.s + hopY, r.z);
+        dummy.updateMatrix();
+        this.rabB.setMatrixAt(i, dummy.matrix);
+        dummy.position.set(r.x + fx * 0.34 * r.s, r.y + 0.58 * r.s + hopY, r.z + fz * 0.34 * r.s);
+        dummy.updateMatrix();
+        this.rabH.setMatrixAt(i, dummy.matrix);
+        const lean = -0.15 - Math.min(1, r.sp / 3) * 0.5;
+        dummy.rotation.set(lean, r.hd, 0.12);
+        dummy.position.set(r.x + fx * 0.3 * r.s - fz * 0.08 * r.s, r.y + 0.68 * r.s + hopY, r.z + fz * 0.3 * r.s + fx * 0.08 * r.s);
+        dummy.updateMatrix();
+        this.rabE.setMatrixAt(i * 2, dummy.matrix);
+        dummy.rotation.set(lean, r.hd, -0.12);
+        dummy.position.set(r.x + fx * 0.3 * r.s + fz * 0.08 * r.s, r.y + 0.68 * r.s + hopY, r.z + fz * 0.3 * r.s - fx * 0.08 * r.s);
+        dummy.updateMatrix();
+        this.rabE.setMatrixAt(i * 2 + 1, dummy.matrix);
+      }
+      this.rabB.instanceMatrix.needsUpdate = true;
+      this.rabH.instanceMatrix.needsUpdate = true;
+      this.rabE.instanceMatrix.needsUpdate = true;
+    }
+    // Poranna mgła
+    const mistF = clamp(1 - Math.abs(sunH - 0.1) * 4.5, 0, 1) * (raining ? 0.4 : 1);
+    for (const m of this.mists) {
+      m.s.material.opacity = mistF * 0.3;
+      m.s.visible = mistF > 0.02;
+      m.s.position.x = m.bx + Math.sin(t * 0.07 + m.ph) * 4;
+      m.s.position.z = m.bz + Math.cos(t * 0.05 + m.ph * 2) * 4;
+    }
+    // Tęcza (zawsze naprzeciw słońca)
+    if (this.rainbowT > 0) {
+      this.rainbowT = Math.max(0, this.rainbowT - dt / 26);
+      const rl = Math.hypot(sd.x, sd.z) || 1;
+      this.rainbow.position.set(px - (sd.x / rl) * 550, 150, pz - (sd.z / rl) * 550);
+      this.rainbow.material.opacity = this.rainbowT * 0.5 * dayF;
+      this.rainbow.visible = this.rainbow.material.opacity > 0.02;
+    } else this.rainbow.visible = false;
+    // Spadające gwiazdy (noc)
+    if (this.nightF > 0.6 && !raining) {
+      if (this.shootK < 0) {
+        this.shootT -= dt;
+        if (this.shootT <= 0) {
+          const a = rand(0, 6.28);
+          this._shootFrom.set(px + Math.cos(a) * rand(200, 500), rand(250, 420), pz + Math.sin(a) * rand(200, 500));
+          v3.set(rand(-1, 1), rand(-0.45, -0.2), rand(-1, 1)).normalize().multiplyScalar(rand(220, 340));
+          this._shootTo.copy(this._shootFrom).add(v3);
+          this.shootK = 0; this._shootDur = rand(0.6, 1.1);
+        }
+      } else {
+        this.shootK += dt / this._shootDur;
+        if (this.shootK >= 1) {
+          this.shootK = -1; this.shoot.visible = false;
+          this.shootT = rand(4, 16);
+        } else {
+          this.shoot.visible = true;
+          this.shoot.position.lerpVectors(this._shootFrom, this._shootTo, this.shootK);
+          this.shoot.material.opacity = Math.sin(this.shootK * Math.PI) * 0.9;
+        }
+      }
+    } else { this.shootK = -1; this.shoot.visible = false; }
+  }
+
   // ---------- AKTUALIZACJA ----------
   update(dt, t, playerPos) {
     this.time = t;
@@ -2444,9 +2752,11 @@ export class World {
       W.t = 0;
       if (W.mode === 'clear') {
         W.mode = 'rain'; W.next = 25 + Math.random() * 40;
+        this.rainbowT = 0;
         this.onWeatherChange && this.onWeatherChange('rain');
       } else {
         W.mode = 'clear'; W.next = 80 + Math.random() * 140;
+        if (this.nightF < 0.7) this.rainbowT = 1;
         this.onWeatherChange && this.onWeatherChange('clear');
       }
     }
@@ -2519,7 +2829,9 @@ export class World {
     const winI = 0.15 + this.nightF * 1.6;
     for (const m of this.windowMats) m.emissiveIntensity = winI;
 
-    // Woda
+    // Woda — barwa podąża za porą dnia
+    if (!this._wDay) { this._wDay = new THREE.Color(0x9fd4e8); this._wNight = new THREE.Color(0x14334d); this._wDusk = new THREE.Color(0xc97a4a); }
+    this.waterMat.color.copy(this._wDay).lerp(this._wNight, this.nightF).lerp(this._wDusk, duskF * 0.3 * dayF);
     if (this.waterMat.map) {
       this.waterMat.map.offset.x = (t * 0.008) % 1;
       this.waterMat.map.offset.y = (t * 0.013) % 1;
@@ -2597,6 +2909,7 @@ export class World {
       b.s.scale.x = 2.2 + Math.sin(t * 10 + b.ph * 8) * 0.9; // machanie
     }
 
+    this.updateAmbient(dt, t, playerPos, dayF, duskF, raining, sunH, sd);
     // Emitery
     for (const e of this.emitters) e.update(dt);
     if (this.fireflies) this.fireflies.mat.opacity = 0.35 + this.nightF * 0.6;

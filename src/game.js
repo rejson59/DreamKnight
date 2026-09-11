@@ -133,7 +133,7 @@ export class Game {
 
   applyQuality(name) {
     const q = QUALITY_PRESETS[name] || QUALITY_PRESETS.medium;
-    this._basePR = Math.min(devicePixelRatio || 1, q.pixelRatio);
+    this._basePR = Math.min(devicePixelRatio || 1, q.pixelRatio, 2); // twardy limit: telefony 3x+ zjadają GPU
     this.renderer.setPixelRatio(this._basePR * (this.dynScale || 1));
     this.world.applyQuality(name);
     if (this.fx) this.fx.setQuality(name);
