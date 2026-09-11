@@ -16,6 +16,63 @@ function mat(color, opts = {}) {
   }
   return m;
 }
+// Proceduralne mikro-tekstury postaci (jasne, mnożone przez kolor materiału)
+const texCache = new Map();
+function microTex(kind) {
+  let t = texCache.get(kind);
+  if (t) return t;
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const x = c.getContext('2d');
+  if (kind === 'skin') {
+    x.fillStyle = '#f5ece0'; x.fillRect(0, 0, S, S);
+    for (let i = 0; i < 900; i++) {
+      x.fillStyle = `rgba(190,150,120,${0.05 + Math.random() * 0.09})`;
+      x.fillRect(Math.random() * S, Math.random() * S, 1.4, 1.4);
+    }
+    for (let i = 0; i < 26; i++) {
+      x.fillStyle = `rgba(170,120,90,${0.05 + Math.random() * 0.08})`;
+      x.beginPath(); x.arc(Math.random() * S, Math.random() * S, 1 + Math.random() * 2.4, 0, 7); x.fill();
+    }
+  } else if (kind === 'cloth') {
+    x.fillStyle = '#f2f2f2'; x.fillRect(0, 0, S, S);
+    for (let yy = 0; yy < S; yy += 2) {
+      x.fillStyle = (yy / 2) % 2 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.06)';
+      x.fillRect(0, yy, S, 1);
+    }
+    for (let xx = 0; xx < S; xx += 2) {
+      x.fillStyle = (xx / 2) % 2 ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)';
+      x.fillRect(xx, 0, 1, S);
+    }
+  } else { // leather
+    x.fillStyle = '#d9c8b4'; x.fillRect(0, 0, S, S);
+    for (let i = 0; i < 60; i++) {
+      x.fillStyle = `rgba(120,90,60,${0.05 + Math.random() * 0.1})`;
+      x.beginPath();
+      x.ellipse(Math.random() * S, Math.random() * S, 3 + Math.random() * 9, 2 + Math.random() * 6, Math.random() * 3, 0, 7);
+      x.fill();
+    }
+    for (let i = 0; i < 500; i++) {
+      x.fillStyle = `rgba(90,60,35,${0.05 + Math.random() * 0.08})`;
+      x.fillRect(Math.random() * S, Math.random() * S, 1.2, 1.2);
+    }
+  }
+  t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  texCache.set(kind, t);
+  return t;
+}
+function matT(color, kind, opts = {}) {
+  const key = color + '|t' + kind + '|' + (opts.metalness || 0) + '|' + (opts.roughness ?? 0.85);
+  let m = matCache.get(key);
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, map: microTex(kind), ...opts });
+    matCache.set(key, m);
+  }
+  return m;
+}
 function boxGeo(w, h, d) {
   const key = `b${w},${h},${d}`;
   let g = geoCache.get(key);
@@ -73,71 +130,85 @@ export function createHumanoid(o = {}) {
   const s = o.scale || 1;
   const g = new THREE.Group();
   g.userData.actor = true;
-  const skin = mat(o.skin ?? 0xd9a066);
-  const shirt = mat(o.shirt ?? 0x4a5a7a);
-  const pants = mat(o.pants ?? 0x3a3040);
-  const boots = mat(o.boots ?? 0x2c1e12);
+  const skin = matT(o.skin ?? 0xd9a066, 'skin');
+  const shirt = matT(o.shirt ?? 0x4a5a7a, 'cloth');
+  const pants = matT(o.pants ?? 0x3a3040, 'cloth');
+  const boots = matT(o.boots ?? 0x2c1e12, 'leather');
   const gloveM = o.dark ? mat(0x1a1a20) : boots;
 
   // Nogi
-  const legL = pivot(-0.13, 0.86, 0), legR = pivot(0.13, 0.86, 0);
+  const legL = pivot(-0.11, 0.86, 0), legR = pivot(0.11, 0.86, 0);
+  const kneeM = o.armor ? mat(0x8a8f98, { metalness: 0.7, roughness: 0.4 }) : pants;
   for (const leg of [legL, legR]) {
-    const thigh = box(0.2, 0.42, 0.22, pants); thigh.position.y = -0.21; leg.add(thigh);
-    const knee = box(0.21, 0.1, 0.23, o.armor ? mat(0x8a8f98, { metalness: 0.7, roughness: 0.4 }) : pants);
-    knee.position.y = -0.45; leg.add(knee);
-    const shin = box(0.18, 0.2, 0.2, pants); shin.position.y = -0.56; leg.add(shin);
-    const boot = box(0.21, 0.22, 0.32, boots); boot.position.set(0, -0.75, 0.04); leg.add(boot);
+    const thigh = cyl(0.085, 0.062, 0.42, pants, 12); thigh.position.y = -0.21; leg.add(thigh);
+    const knee = sph(0.066, kneeM, 10, 8); knee.position.y = -0.435; leg.add(knee);
+    const shin = cyl(0.058, 0.045, 0.34, pants, 12); shin.position.y = -0.61; leg.add(shin);
+    const boot = box(0.17, 0.12, 0.3, boots); boot.position.set(0, -0.8, 0.05); leg.add(boot);
+    const toe = box(0.16, 0.09, 0.1, boots); toe.position.set(0, -0.815, 0.2); toe.rotation.x = -0.15; leg.add(toe);
+    const sole = box(0.18, 0.03, 0.32, mat(0x1a120a)); sole.position.set(0, -0.845, 0.05); leg.add(sole);
     g.add(leg);
   }
   // Tułów
   const hips = pivot(0, 0.86, 0); g.add(hips);
   const chestM = o.armor ? mat(o.dark ? 0x2a2a33 : 0x9aa0aa, { metalness: 0.75, roughness: 0.35 }) : shirt;
-  const torso = box(0.52, 0.62, 0.3, chestM);
-  torso.position.y = 0.33; hips.add(torso);
+  const pelvis = box(o.female ? 0.37 : 0.34, 0.2, 0.22, pants);
+  pelvis.position.y = 0.06; hips.add(pelvis);
+  const torso = cyl(0.165, 0.125, 0.48, chestM, 14);
+  torso.scale.z = 0.72; torso.position.y = 0.4; hips.add(torso);
+  if (o.female && !o.robe) {
+    for (const sx of [-1, 1]) {
+      const b = sph(0.062, shirt, 10, 8); b.position.set(sx * 0.075, 0.48, 0.085); hips.add(b);
+    }
+  }
   if (o.armor) {
     // zdobienia zbroi
-    const trim = box(0.54, 0.08, 0.32, mat(o.dark ? 0x7a1010 : 0xd8a83c, { metalness: 0.6, roughness: 0.4 }));
-    trim.position.y = 0.52; hips.add(trim);
+    const trim = box(0.36, 0.07, 0.26, mat(o.dark ? 0x7a1010 : 0xd8a83c, { metalness: 0.6, roughness: 0.4 }));
+    trim.position.y = 0.56; hips.add(trim);
     for (const sx of [-1, 1]) {
-      const pad = sph(0.13, chestM); pad.position.set(sx * 0.3, 0.6, 0); hips.add(pad);
+      const pad = sph(0.085, chestM, 10, 8); pad.position.set(sx * 0.21, 0.64, 0); hips.add(pad);
     }
   }
   // Pas + sprzączka
-  const belt = box(0.54, 0.09, 0.32, boots); belt.position.y = 0.06; hips.add(belt);
-  const buckle = box(0.12, 0.07, 0.03, mat(0xd8a83c, { metalness: 0.7, roughness: 0.35 }));
-  buckle.position.set(0, 0.06, 0.17); hips.add(buckle);
+  const belt = box(0.3, 0.07, 0.23, boots); belt.position.y = 0.18; hips.add(belt);
+  const buckle = box(0.09, 0.055, 0.03, mat(0xd8a83c, { metalness: 0.7, roughness: 0.35 }));
+  buckle.position.set(0, 0.18, 0.12); hips.add(buckle);
   // Spódnica / szata
   if (o.female && !o.robe) {
-    const skirt = cyl(0.3, 0.44, 0.55, mat(o.skirt ?? 0x6b3a4a)); skirt.position.y = -0.2; hips.add(skirt);
+    const skirt = cyl(0.24, 0.34, 0.5, matT(o.skirt ?? 0x6b3a4a, 'cloth'), 14); skirt.position.y = -0.18; hips.add(skirt);
   }
   if (o.robe) {
-    const robe = cyl(0.34, 0.48, 0.95, mat(o.robe)); robe.position.y = 0.18; hips.add(robe);
-    const collar = cyl(0.24, 0.3, 0.18, mat(o.robe)); collar.position.y = 0.68; hips.add(collar);
+    const robeM = matT(o.robe, 'cloth');
+    const robe = cyl(0.26, 0.38, 0.95, robeM, 14); robe.position.y = 0.12; hips.add(robe);
+    const collar = cyl(0.18, 0.24, 0.16, robeM, 12); collar.position.y = 0.6; hips.add(collar);
   }
   // Peleryna (z segmentami do falowania)
   let cape = null;
   if (o.cape) {
-    cape = new THREE.Mesh(boxGeo(0.55, 0.95, 0.03),
+    cape = new THREE.Mesh(boxGeo(0.44, 0.85, 0.025),
       new THREE.MeshStandardMaterial({ color: o.cape, roughness: 0.9 }));
-    cape.position.set(0, 0.12, -0.2); cape.rotation.x = 0.12;
+    cape.position.set(0, 0.14, -0.17); cape.rotation.x = 0.12;
     cape.castShadow = true;
     hips.add(cape);
     const clasp = sph(0.05, mat(0xd8a83c, { metalness: 0.7, roughness: 0.3 }), 8, 6);
-    clasp.position.set(0, 0.58, 0.16); hips.add(clasp);
+    clasp.position.set(0, 0.56, 0.13); hips.add(clasp);
   }
   // Ramiona
-  const armL = pivot(-0.34, 0.58, 0), armR = pivot(0.34, 0.58, 0);
+  const armL = pivot(-0.215, 0.58, 0), armR = pivot(0.215, 0.58, 0);
   hips.add(armL, armR);
+  const sleeveM = o.armor ? chestM : shirt;
   for (const arm of [armL, armR]) {
-    const a = box(0.15, 0.34, 0.17, o.armor ? chestM : shirt);
-    a.position.y = -0.16; arm.add(a);
-    const cuff = box(0.16, 0.08, 0.18, gloveM); cuff.position.y = -0.36; arm.add(cuff);
-    const fore = box(0.13, 0.14, 0.15, o.armor ? chestM : skin); fore.position.y = -0.44; arm.add(fore);
-    const hand = sph(0.085, o.armor || o.dark ? gloveM : skin, 8, 8); hand.position.y = -0.55; arm.add(hand);
+    const delt = sph(0.075, sleeveM, 10, 8); arm.add(delt);
+    const a = cyl(0.055, 0.045, 0.3, sleeveM, 10); a.position.y = -0.15; arm.add(a);
+    const elbow = sph(0.048, sleeveM, 8, 8); elbow.position.y = -0.3; arm.add(elbow);
+    const fore = cyl(0.045, 0.036, 0.28, o.armor ? chestM : skin, 10); fore.position.y = -0.44; arm.add(fore);
+    const cuff = cyl(0.05, 0.05, 0.07, gloveM, 10); cuff.position.y = -0.33; arm.add(cuff);
+    const hand = sph(0.06, o.armor || o.dark ? gloveM : skin, 10, 8);
+    hand.scale.set(0.85, 1.25, 0.95); hand.position.y = -0.62; arm.add(hand);
+    const thumb = box(0.028, 0.07, 0.03, hand.material); thumb.position.set(0, -0.6, 0.055); thumb.rotation.x = -0.3; arm.add(thumb);
   }
   // Broń w prawej dłoni
   let weaponMesh = null;
-  const handR = pivot(0, -0.55, 0); armR.add(handR);
+  const handR = pivot(0, -0.62, 0); armR.add(handR);
   const bladeM = mat(o.dark ? 0x3a0a0a : 0xd5dae2, { metalness: 0.9, roughness: 0.2, emissive: o.dark ? 0x550000 : 0, emissiveIntensity: o.dark ? 1 : 0 });
   if (o.sword || o.greatsword) {
     const big = !!o.greatsword;
@@ -187,31 +258,33 @@ export function createHumanoid(o = {}) {
   }
   // Pochwa na miecz (lewe biodro)
   if (o.sword) {
-    const scab = box(0.1, 0.8, 0.06, mat(0x3a2412));
-    scab.position.set(-0.32, -0.25, 0.05); scab.rotation.z = 0.25;
+    const scab = box(0.09, 0.7, 0.055, mat(0x3a2412));
+    scab.position.set(-0.24, -0.2, 0.04); scab.rotation.z = 0.25;
     hips.add(scab);
-    const scabTip = box(0.11, 0.08, 0.07, mat(0x8a6a1f, { metalness: 0.6 }));
-    scabTip.position.set(-0.42, -0.6, 0.05); scabTip.rotation.z = 0.25;
+    const scabTip = box(0.1, 0.07, 0.06, mat(0x8a6a1f, { metalness: 0.6 }));
+    scabTip.position.set(-0.33, -0.56, 0.04); scabTip.rotation.z = 0.25;
     hips.add(scabTip);
   }
   // Tarcza
   if (o.shield) {
-    const sh = cyl(0.27, 0.27, 0.05, mat(o.dark ? 0x1a1a20 : 0x7a2a1a, { metalness: 0.3, roughness: 0.5 }), 16);
-    sh.rotation.z = Math.PI / 2; sh.position.set(0, -0.35, 0.1);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.025, 6, 18), mat(0x8a6a1f, { metalness: 0.6 }));
-    rim.rotation.y = Math.PI / 2; rim.position.set(0, -0.35, 0.1);
+    const sh = cyl(0.24, 0.24, 0.05, mat(o.dark ? 0x1a1a20 : 0x7a2a1a, { metalness: 0.3, roughness: 0.5 }), 16);
+    sh.rotation.z = Math.PI / 2; sh.position.set(0, -0.4, 0.08);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.022, 6, 18), mat(0x8a6a1f, { metalness: 0.6 }));
+    rim.rotation.y = Math.PI / 2; rim.position.set(0, -0.4, 0.08);
     const boss = sph(0.07, mat(0xd5dae2, { metalness: 0.85, roughness: 0.3 }), 8, 6);
-    boss.position.set(0, -0.35, 0.2);
+    boss.position.set(0, -0.4, 0.16);
     armL.add(sh, rim, boss);
   }
   // Głowa
-  const neck = pivot(0, 0.68, 0); hips.add(neck);
-  const head = sph(0.21, skin, 16, 14); head.position.y = 0.22; neck.add(head);
+  const neck = pivot(0, 0.66, 0); hips.add(neck);
+  const throat = cyl(0.05, 0.058, 0.14, skin, 10); throat.position.y = -0.02; neck.add(throat);
+  const head = sph(0.135, skin, 18, 16); head.scale.set(0.92, 1.1, 0.98); head.position.y = 0.2; neck.add(head);
+  const jaw = sph(0.09, skin, 12, 10); jaw.scale.set(0.85, 0.75, 0.9); jaw.position.set(0, 0.115, 0.02); neck.add(jaw);
   // Nos + uszy
-  const nose = coneM(0.035, 0.09, skin, 6);
-  nose.position.set(0, 0.2, 0.21); nose.rotation.x = Math.PI / 2 + 0.2; neck.add(nose);
+  const nose = coneM(0.022, 0.06, skin, 6);
+  nose.position.set(0, 0.185, 0.125); nose.rotation.x = Math.PI / 2 + 0.2; neck.add(nose);
   for (const sx of [-1, 1]) {
-    const ear = sph(0.045, skin, 6, 6); ear.position.set(sx * 0.2, 0.22, 0); neck.add(ear);
+    const ear = sph(0.028, skin, 8, 6); ear.scale.set(0.6, 1, 0.8); ear.position.set(sx * 0.125, 0.2, 0); neck.add(ear);
   }
   // Oczy: białko + tęczówka + źrenica (zapamiętane do mrugania)
   const whiteM = mat(0xf2ede2, { roughness: 0.25 });
@@ -219,85 +292,87 @@ export function createHumanoid(o = {}) {
   const irisM = o.glowingEyes ? pupilM : mat(o.eyeColor ?? 0x4a2c14, { roughness: 0.3 });
   const eyeMeshes = [];
   for (const sx of [-1, 1]) {
-    const w = new THREE.Mesh(sphGeo(o.glowingEyes ? 0.045 : 0.042, 8, 8), whiteM);
-    w.position.set(sx * 0.082, 0.26, 0.175); neck.add(w); eyeMeshes.push(w);
-    const iris = new THREE.Mesh(sphGeo(0.03, 8, 8), irisM);
-    iris.position.set(sx * 0.082, 0.26, 0.19); neck.add(iris); eyeMeshes.push(iris);
-    const p = new THREE.Mesh(sphGeo(o.glowingEyes ? 0.024 : 0.02, 6, 6), pupilM);
-    p.position.set(sx * 0.082, 0.26, 0.21); neck.add(p); eyeMeshes.push(p);
+    const w = new THREE.Mesh(sphGeo(o.glowingEyes ? 0.032 : 0.03, 8, 8), whiteM);
+    w.position.set(sx * 0.052, 0.215, 0.108); neck.add(w); eyeMeshes.push(w);
+    const iris = new THREE.Mesh(sphGeo(0.02, 8, 8), irisM);
+    iris.position.set(sx * 0.052, 0.215, 0.118); neck.add(iris); eyeMeshes.push(iris);
+    const p = new THREE.Mesh(sphGeo(o.glowingEyes ? 0.015 : 0.012, 6, 6), pupilM);
+    p.position.set(sx * 0.052, 0.215, 0.127); neck.add(p); eyeMeshes.push(p);
     // brew
-    const brow = box(0.07, 0.018, 0.02, mat(o.hair ?? 0x3a2a1a));
-    brow.position.set(sx * 0.082, 0.325, 0.185); brow.rotation.z = -sx * 0.12; neck.add(brow);
+    const brow = box(0.05, 0.012, 0.015, mat(o.hair ?? 0x3a2a1a));
+    brow.position.set(sx * 0.052, 0.26, 0.105); brow.rotation.z = -sx * 0.12; neck.add(brow);
   }
   // Usta
-  const mouth = box(0.07, 0.012, 0.01, mat(0x8a4a3a));
-  mouth.position.set(0, 0.13, 0.195); neck.add(mouth);
+  const mouth = box(0.045, 0.008, 0.01, mat(0x8a4a3a));
+  mouth.position.set(0, 0.135, 0.115); neck.add(mouth);
   // Włosy / nakrycia głowy
   if (o.hair) {
-    const h = sph(0.215, mat(o.hair), 14, 10); h.position.set(0, 0.27, -0.02); h.scale.set(1, 0.75, 1); neck.add(h);
-    // grzywka
-    const fringe = sph(0.21, mat(o.hair), 12, 6); fringe.position.set(0, 0.33, 0.06); fringe.scale.set(1, 0.4, 0.8); neck.add(fringe);
+    const hairM = mat(o.hair, { roughness: 0.95 });
+    const h = sph(0.14, hairM, 14, 10); h.position.set(0, 0.24, -0.015); h.scale.set(1, 0.72, 1); neck.add(h);
+    const fringe = sph(0.135, hairM, 12, 6); fringe.position.set(0, 0.28, 0.045); fringe.scale.set(1, 0.35, 0.75); neck.add(fringe);
     if (o.female) {
-      const bun = sph(0.08, mat(o.hair)); bun.position.set(0, 0.32, -0.2); neck.add(bun);
+      const bun = sph(0.055, hairM, 10, 8); bun.position.set(0, 0.27, -0.13); neck.add(bun);
       for (const sx of [-1, 1]) {
-        const lock = cyl(0.045, 0.03, 0.35, mat(o.hair), 8); lock.position.set(sx * 0.17, 0.05, -0.1); neck.add(lock);
+        const lock = cyl(0.03, 0.02, 0.3, hairM, 8); lock.position.set(sx * 0.11, 0.03, -0.06); neck.add(lock);
       }
+    } else {
+      const back = sph(0.13, hairM, 12, 8); back.position.set(0, 0.18, -0.07); back.scale.set(0.95, 0.9, 0.7); neck.add(back);
     }
   }
   if (o.helmet) {
     const helmM = mat(o.dark ? 0x2a2a33 : 0xb8bec8, { metalness: 0.8, roughness: 0.3 });
-    const helm = sph(0.235, helmM, 16, 12);
-    helm.position.y = 0.26; helm.scale.set(1, 0.85, 1); neck.add(helm);
+    const helm = sph(0.15, helmM, 16, 12);
+    helm.position.y = 0.23; helm.scale.set(1, 0.85, 1); neck.add(helm);
     // nosal
-    const nasal = box(0.05, 0.14, 0.03, helmM); nasal.position.set(0, 0.19, 0.21); neck.add(nasal);
+    const nasal = box(0.035, 0.1, 0.02, helmM); nasal.position.set(0, 0.16, 0.13); neck.add(nasal);
     // policzki
     for (const sx of [-1, 1]) {
-      const cheek = box(0.03, 0.12, 0.12, helmM); cheek.position.set(sx * 0.2, 0.14, 0.08); neck.add(cheek);
+      const cheek = box(0.02, 0.09, 0.08, helmM); cheek.position.set(sx * 0.13, 0.12, 0.05); neck.add(cheek);
     }
     if (!o.dark) {
-      const plume = box(0.06, 0.1, 0.32, mat(0xc02020)); plume.position.set(0, 0.46, -0.04); neck.add(plume);
-      const plumeBase = box(0.08, 0.05, 0.34, mat(0x8a6a1f, { metalness: 0.6 })); plumeBase.position.set(0, 0.42, -0.04); neck.add(plumeBase);
+      const plume = box(0.04, 0.07, 0.22, mat(0xc02020)); plume.position.set(0, 0.36, -0.03); neck.add(plume);
+      const plumeBase = box(0.055, 0.035, 0.24, mat(0x8a6a1f, { metalness: 0.6 })); plumeBase.position.set(0, 0.33, -0.03); neck.add(plumeBase);
     } else {
       // rogi mrocznego rycerza
       for (const sx of [-1, 1]) {
-        const horn = coneM(0.045, 0.3, helmM, 6);
-        horn.position.set(sx * 0.16, 0.5, -0.02); horn.rotation.z = -sx * 0.5; neck.add(horn);
+        const horn = coneM(0.03, 0.22, helmM, 6);
+        horn.position.set(sx * 0.1, 0.4, -0.01); horn.rotation.z = -sx * 0.5; neck.add(horn);
       }
     }
   }
   if (o.hood) {
-    const hood = new THREE.Mesh(coneGeo(0.27, 0.46, 10), mat(o.hood, { side: THREE.DoubleSide }));
-    hood.position.y = 0.38; hood.castShadow = true; neck.add(hood);
+    const hood = new THREE.Mesh(coneGeo(0.18, 0.34, 10), mat(o.hood, { side: THREE.DoubleSide }));
+    hood.position.y = 0.3; hood.castShadow = true; neck.add(hood);
   }
   if (o.crown) {
     const crM = mat(0xe8b64c, { metalness: 0.85, roughness: 0.3 });
-    const cr = cyl(0.2, 0.22, 0.12, crM, 10); cr.position.y = 0.44; neck.add(cr);
+    const cr = cyl(0.13, 0.14, 0.09, crM, 10); cr.position.y = 0.35; neck.add(cr);
     for (let i = 0; i < 6; i++) {
-      const spike = new THREE.Mesh(coneGeo(0.032, 0.1, 6), crM);
+      const spike = new THREE.Mesh(coneGeo(0.022, 0.07, 6), crM);
       const a = (i / 6) * Math.PI * 2;
-      spike.position.set(Math.cos(a) * 0.19, 0.54, Math.sin(a) * 0.19);
+      spike.position.set(Math.cos(a) * 0.125, 0.42, Math.sin(a) * 0.125);
       neck.add(spike);
     }
-    const gem = sph(0.035, mat(0xc02020, { emissive: 0x550000, emissiveIntensity: 0.8 }), 8, 6);
-    gem.position.set(0, 0.44, 0.21); neck.add(gem);
+    const gem = sph(0.024, mat(0xc02020, { emissive: 0x550000, emissiveIntensity: 0.8 }), 8, 6);
+    gem.position.set(0, 0.35, 0.135); neck.add(gem);
   }
   if (o.wizardHat) {
     const hatM = mat(0x2a3a6b);
-    const brim = cyl(0.3, 0.32, 0.05, hatM, 12); brim.position.y = 0.4; neck.add(brim);
-    const band = cyl(0.21, 0.23, 0.07, mat(0xd8a83c, { metalness: 0.6 }), 12); band.position.y = 0.44; neck.add(band);
-    const cone = new THREE.Mesh(coneGeo(0.2, 0.52, 12), hatM);
-    cone.position.y = 0.66; cone.rotation.z = 0.12; cone.castShadow = true; neck.add(cone);
-    const star = sph(0.04, mat(0xffe27a, { emissive: 0xcc9900, emissiveIntensity: 1.2 }), 8, 6);
-    star.position.set(0.06, 0.9, 0); neck.add(star);
+    const brim = cyl(0.2, 0.21, 0.035, hatM, 12); brim.position.y = 0.32; neck.add(brim);
+    const band = cyl(0.135, 0.15, 0.05, mat(0xd8a83c, { metalness: 0.6 }), 12); band.position.y = 0.35; neck.add(band);
+    const cone = new THREE.Mesh(coneGeo(0.13, 0.4, 12), hatM);
+    cone.position.y = 0.53; cone.rotation.z = 0.12; cone.castShadow = true; neck.add(cone);
+    const star = sph(0.028, mat(0xffe27a, { emissive: 0xcc9900, emissiveIntensity: 1.2 }), 8, 6);
+    star.position.set(0.045, 0.72, 0); neck.add(star);
   }
   if (o.beard) {
-    const b = new THREE.Mesh(coneGeo(0.15, 0.42, 8), mat(o.beard));
-    b.position.set(0, 0.0, 0.12); b.rotation.x = 0.25; b.castShadow = true; neck.add(b);
-    const must = box(0.14, 0.03, 0.03, mat(o.beard)); must.position.set(0, 0.1, 0.19); neck.add(must);
+    const b = new THREE.Mesh(coneGeo(0.1, 0.32, 8), mat(o.beard));
+    b.position.set(0, 0.0, 0.08); b.rotation.x = 0.25; b.castShadow = true; neck.add(b);
+    const must = box(0.09, 0.02, 0.02, mat(o.beard)); must.position.set(0, 0.08, 0.12); neck.add(must);
   }
   if (o.cap) {
-    const capM = cyl(0.2, 0.23, 0.1, mat(o.cap), 10); capM.position.y = 0.42; neck.add(capM);
-    const peak = box(0.2, 0.03, 0.14, mat(o.cap)); peak.position.set(0, 0.39, 0.22); neck.add(peak);
+    const capM = cyl(0.13, 0.15, 0.07, mat(o.cap), 10); capM.position.y = 0.33; neck.add(capM);
+    const peak = box(0.13, 0.02, 0.1, mat(o.cap)); peak.position.set(0, 0.31, 0.14); neck.add(peak);
   }
 
   g.scale.setScalar(s);
@@ -311,7 +386,7 @@ export function createHumanoid(o = {}) {
       const shut = bl < 0.13 ? 0.1 : 1;
       for (const e of eyeMeshes) e.scale.y = shut;
       const b = 1 + Math.sin(t * 1.7 + this.blinkOff) * 0.02;
-      torso.scale.set(b, 1, b);
+      torso.scale.set(b, 1, 0.72 * b);
     },
     reset() {
       legL.rotation.set(0, 0, 0); legR.rotation.set(0, 0, 0);
@@ -330,7 +405,7 @@ export function createHumanoid(o = {}) {
       hips.rotation.y = Math.sin(phase) * 0.06 * amp;
       hips.rotation.x = 0.06 * amp; // lekkie pochylenie
       neck.rotation.x = -0.05;
-      if (cape) { cape.rotation.x = 0.12 + amp * 0.45 + Math.sin(phase * 2) * 0.05; cape.position.z = -0.2 - amp * 0.04; }
+      if (cape) { cape.rotation.x = 0.12 + amp * 0.45 + Math.sin(phase * 2) * 0.05; cape.position.z = -0.17 - amp * 0.04; }
     },
     setRun(phase) {
       const s1 = Math.sin(phase) * 0.95, s2 = Math.sin(phase + Math.PI) * 0.95;
@@ -341,7 +416,7 @@ export function createHumanoid(o = {}) {
       hips.rotation.x = 0.22; // mocne pochylenie
       hips.rotation.y = Math.sin(phase) * 0.09;
       neck.rotation.x = -0.18;
-      if (cape) { cape.rotation.x = 1.0 + Math.sin(phase * 2) * 0.12; cape.position.z = -0.28; }
+      if (cape) { cape.rotation.x = 1.0 + Math.sin(phase * 2) * 0.12; cape.position.z = -0.24; }
     },
     setIdle(t) {
       legL.rotation.x *= 0.85; legR.rotation.x *= 0.85;
@@ -353,7 +428,7 @@ export function createHumanoid(o = {}) {
       hips.rotation.x = 0; hips.rotation.y = Math.sin(t * 0.3) * 0.03;
       neck.rotation.y = Math.sin(t * 0.4) * 0.28;
       neck.rotation.x = Math.sin(t * 0.9) * 0.04;
-      if (cape) { cape.rotation.x = 0.12 + Math.sin(t * 2) * 0.04; cape.position.z = -0.2; }
+      if (cape) { cape.rotation.x = 0.12 + Math.sin(t * 2) * 0.04; cape.position.z = -0.17; }
     },
     // k: 0..1, variant: 0 z góry, 1 poziome, 2 pchnięcie
     setAttack(k, variant = 0) {

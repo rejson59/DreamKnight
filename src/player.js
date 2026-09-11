@@ -203,12 +203,25 @@ export class Player {
 
     // Ruch
     const mv = input.moveVec();
-    const wantSprint = input.sprinting() && mv.mag > 0.1 && this.stam > 1;
-    this.sprinting = wantSprint && !dead;
-    let speed = (this.mounted ? 10.5 : 5.2) * this.speedMul;
-    if (this.sprinting) speed *= 1.55;
-    if (this.atkT > 0 || this.castT > 0) speed *= 0.35;
-    if (this.inShallow()) speed *= 0.6;
+    // Histereza sprintu: start wymaga zapasu staminy, koniec dopiero przy zerze.
+    // Bez tego sprint migotał kilka razy na sekundę i postać się zacinała.
+    const wantRun = input.sprinting() && mv.mag > 0.1 && !dead;
+    if (this.sprinting) {
+      if (!wantRun || this.stam <= 0) this.sprinting = false;
+    } else if (wantRun && this.stam > 18) {
+      this.sprinting = true;
+    }
+    const baseSpeed = (this.mounted ? 10.5 : 5.2) * this.speedMul;
+    let speedTarget = baseSpeed;
+    if (this.sprinting) speedTarget *= 1.55;
+    if (this.atkT > 0 || this.castT > 0) speedTarget *= 0.35;
+    if (this.inShallow()) speedTarget *= 0.6;
+    // Płynne rozpędzanie i hamowanie zamiast szarpnięcia prędkości
+    this._speed = this._speed ?? baseSpeed;
+    this._speed += (speedTarget - this._speed) * Math.min(1, dt * 5);
+    if (Math.abs(speedTarget - this._speed) < 0.02) this._speed = speedTarget;
+    const speed = this._speed;
+    const runAnim = this._speed > baseSpeed * 1.2; // animacja biegu za WYGŁADZONĄ prędkością
 
     const fx = -Math.sin(this.camYaw), fz = -Math.cos(this.camYaw);
     const rx = -fz, rz = fx;
@@ -282,8 +295,8 @@ export class Player {
       h.group.position.set(this.group.position.x, gy, this.group.position.z);
       h.group.rotation.y = this.group.rotation.y;
       if (this.moving) {
-        h.walkPhase += dt * (this.sprinting ? 10 : 7);
-        if (this.sprinting) h.setGallop(h.walkPhase);
+        h.walkPhase += dt * (runAnim ? 10 : 7);
+        if (runAnim) h.setGallop(h.walkPhase);
         else h.setWalk(h.walkPhase, 0.9);
       } else h.setIdle(ctx.t);
       this.group.position.y = gy + 1.28;
@@ -306,7 +319,7 @@ export class Player {
     } else if (this.hurtT > 0.4) {
       this.rig.setFlinch();
     } else if (this.moving) {
-      if (this.sprinting) {
+      if (runAnim) {
         this.walkPhase += dt * 11;
         this.rig.setRun(this.walkPhase);
       } else {
@@ -323,7 +336,7 @@ export class Player {
     if (this.torchOn) {
       const tp = this.group.position;
       this.torchLight.position.set(tp.x, tp.y + 2, tp.z);
-      this.torchFlame.position.set(tp.x + Math.sin(this.group.rotation.y) * -0.5, tp.y + 1.3, tp.z + Math.cos(this.group.rotation.y) * -0.5);
+      this.torchFlame.position.set(tp.x + Math.sin(this.group.rotation.y) * -0.5, tp.y + 1.24, tp.z + Math.cos(this.group.rotation.y) * -0.5);
       const fl = 1 + Math.sin(ctx.t * 13) * 0.12;
       this.torchFlame.scale.set(0.7 * fl, 0.95 * fl, 1);
       this.torchLight.intensity = (this.world.isNight ? 30 : 18) * fl;
