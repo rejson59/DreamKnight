@@ -24,14 +24,18 @@ npm run preview  # podgląd buildu
 
 ## 🌐 GitHub Pages
 
-Strona wdraża się automatycznie na GitHub Pages przy każdym pushu do gałęzi
-`main` (workflow `.github/workflows/deploy.yml`, źródło Pages: **GitHub Actions**).
+Strona jest wdrożona na GitHub Pages pod adresem
+<https://rejson59.github.io/DreamKnight/> (źródło: gałąź `main`, katalog `/`).
 
-- Adres strony: <https://rejson59.github.io/DreamKnight/>
-- Deploy można też uruchomić ręcznie: zakładka **Actions → Deploy to GitHub Pages → Run workflow**
+Repozytorium jest w pełni samowystarczalne: zawiera lokalną kopię three.js
+(`vendor/`), a wszystkie ścieżki są relatywne, więc gra działa zarówno pod
+podkatalogiem `/DreamKnight/`, jak i w każdej innej lokalizacji — bez CDN
+i bez `npm install`.
 
-Build używa relatywnych ścieżek (`base: './'` w `vite.config.js`), więc działa
-pod podkatalogiem repozytorium niezależnie od jego nazwy.
+```bash
+npm install     # opcjonalnie — do `npm run build` (zbudowany bundle)
+npm run dev     # działa też bez npm install (import mapa z ./vendor/)
+```
 
 ## 🎮 Sterowanie
 
