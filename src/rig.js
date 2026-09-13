@@ -528,6 +528,7 @@ export function createQuadruped(type = 'deer', o = {}) {
     wolf:   { body: 0x3a3a42, belly: 0x2a2a32, legH: 0.6, bodyL: 1.05, headR: 0.21, scale: 1.02 },
     rabbit: { body: 0xb0a090, belly: 0xd8d0c0, legH: 0.22, bodyL: 0.42, headR: 0.13, scale: 0.9 },
     boar:   { body: 0x4a3626, belly: 0x3a2a1e, legH: 0.45, bodyL: 0.9, headR: 0.2, scale: 1 },
+    frog:   { body: 0x4a8a3a, belly: 0x9fce7a, legH: 0.14, bodyL: 0.34, headR: 0.15, scale: 0.8 },
   }[type] || {};
   const s = (o.scale || 1) * (conf.scale || 1);
   const bodyM = mat(o.color ?? conf.body);
@@ -659,8 +660,21 @@ export function createQuadruped(type = 'deer', o = {}) {
     }
     const ridge = box(0.1, 0.15, 0.7, darkM); ridge.position.set(0, bodyY + 0.35, -0.1); g.add(ridge);
   }
+  if (type === 'frog') {
+    // wyłupiaste oczy + błoniaste łapki
+    for (const sx of [-1, 1]) {
+      const eye = new THREE.Mesh(sphGeo(conf.headR * 0.45, 8, 8), mat(0xd8e830, { emissive: 0x404410, emissiveIntensity: 0.4 }));
+      eye.position.set(sx * conf.headR * 0.62, 0.52, 0.14 + conf.headR * 0.3); neckP.add(eye);
+      const pupil = new THREE.Mesh(sphGeo(conf.headR * 0.18, 6, 6), mat(0x101410));
+      pupil.position.set(sx * conf.headR * 0.62, 0.52, 0.14 + conf.headR * 0.68); neckP.add(pupil);
+      const foot = new THREE.Mesh(sphGeo(conf.headR * 0.3, 6, 6), darkM);
+      foot.scale.set(1.6, 0.5, 1.9); foot.position.set(sx * 0.24, -conf.legH - 0.02, conf.bodyL * 0.32);
+      foot.castShadow = true; g.add(foot);
+    }
+  }
   // Ogon
   const tailP = pivot(0, bodyY + 0.2, -conf.bodyL * 0.48);
+  if (type === 'frog') tailP.scale.setScalar(0.2); // żaby nie mają ogona
   const tail = cyl(0.04, 0.02, 0.45, type === 'horse' ? mat(0x2a1a10) : darkM);
   tail.position.y = -0.2; tailP.add(tail);
   if (type === 'deer') { const t2 = new THREE.Mesh(sphGeo(0.06, 6, 6), mat(0xf0e8d8)); t2.position.y = -0.4; tailP.add(t2); }
@@ -871,6 +885,93 @@ export function createSkeleton() {
       g.rotation.x = -Math.PI / 2; g.position.y = 0.2;
       // rozsypanie: lekkie rozciągnięcie
       g.scale.set(1.15, 0.7, 1.15);
+    },
+  };
+}
+
+// ---- DUCH BAGNA (widmo) ----
+export function createWraith() {
+  const g = new THREE.Group();
+  g.userData.actor = true;
+  // Półprzezroczysta materia — widmo
+  const ghost = mat(0x9fd8c8, { transparent: true, opacity: 0.55, roughness: 1, emissive: 0x1a4a3a, emissiveIntensity: 0.35 });
+  const ghostDark = mat(0x5a8a7a, { transparent: true, opacity: 0.5, roughness: 1 });
+  // Postać unosi się ~0.9 nad ziemią: korpus budowany w pod-grupie "body"
+  const body = new THREE.Group();
+  body.position.y = 1.05;
+  g.add(body);
+  // Kaptur / głowa
+  const head = new THREE.Mesh(sphGeo(0.24, 12, 10), ghost);
+  head.position.y = 0.55; head.castShadow = true; body.add(head);
+  const hood = new THREE.Mesh(coneGeo(0.3, 0.55, 8), ghostDark);
+  hood.position.y = 0.68; hood.castShadow = true; body.add(hood);
+  // Świecące oczy
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(sphGeo(0.05, 8, 8), mat(0xaaffcc, { emissive: 0x33ff88, emissiveIntensity: 2.4 }));
+    eye.position.set(sx * 0.09, 0.57, 0.19); body.add(eye);
+  }
+  // Korpus — smukła szata z frędzlami
+  const torso = cyl(0.26, 0.4, 0.9, ghost, 10);
+  torso.position.y = 0.05; torso.castShadow = true; body.add(torso);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const tatter = new THREE.Mesh(coneGeo(0.09, 0.5 + Math.random() * 0.3, 5), ghost);
+    tatter.position.set(Math.cos(a) * 0.22, -0.4, Math.sin(a) * 0.22);
+    tatter.rotation.x = Math.PI; tatter.rotation.z = (Math.random() - 0.5) * 0.4;
+    body.add(tatter);
+  }
+  // Ramiona —blade szpony
+  const armL = pivot(-0.3, 0.35, 0), armR = pivot(0.3, 0.35, 0);
+  body.add(armL, armR);
+  for (const arm of [armL, armR]) {
+    const a = cyl(0.05, 0.04, 0.55, ghost, 7); a.position.y = -0.26; arm.add(a);
+    const claw = new THREE.Mesh(coneGeo(0.05, 0.22, 5), ghostDark);
+    claw.position.y = -0.6; claw.rotation.x = Math.PI; arm.add(claw);
+  }
+  // Zimna poświata wokół ducha (radialny gradient generowany lokalnie)
+  const gc = document.createElement('canvas');
+  gc.width = gc.height = 64;
+  const gx = gc.getContext('2d');
+  const grad = gx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, 'rgba(160,255,200,0.9)');
+  grad.addColorStop(1, 'rgba(160,255,200,0)');
+  gx.fillStyle = grad;
+  gx.fillRect(0, 0, 64, 64);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(gc), color: 0xffffff, transparent: true, opacity: 0.4,
+    depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+  glow.scale.set(1.6, 2.2, 1);
+  glow.position.y = 1.2;
+  g.add(glow);
+  return {
+    group: g, hips: body, neck: body, armL, armR, legL: null, legR: null,
+    walkPhase: Math.random() * 10, isWraith: true,
+    alive(t) { // wieczne unoszenie się
+      body.position.y = 1.05 + Math.sin(t * 1.7 + this.walkPhase) * 0.14;
+      body.rotation.z = Math.sin(t * 0.9 + this.walkPhase) * 0.06;
+    },
+    setWalk(p, a = 1) {
+      body.rotation.y = Math.sin(p * 0.5) * 0.12 * a;
+      armL.rotation.x = Math.sin(p + Math.PI) * 0.35 * a - 0.25;
+      armR.rotation.x = Math.sin(p) * 0.35 * a - 0.25;
+      armL.rotation.z = 0.25; armR.rotation.z = -0.25;
+    },
+    setIdle(t) {
+      armL.rotation.x = Math.sin(t * 1.1) * 0.08 - 0.15;
+      armR.rotation.x = Math.sin(t * 1.1 + 1) * 0.08 - 0.15;
+      body.rotation.y = Math.sin(t * 0.6) * 0.2;
+    },
+    setAttack(k) {
+      const r = Math.sin(k * Math.PI);
+      armL.rotation.x = -2.2 * r; armR.rotation.x = -2.2 * r;
+      armL.rotation.z = 0.7 * r; armR.rotation.z = -0.7 * r;
+      body.position.y = 1.05 + r * 0.35; // natarcie w górę-do-przodu
+    },
+    setDead() {
+      g.rotation.x = -Math.PI / 2;
+      g.position.y = 0.3;
+      g.scale.set(1.2, 1.2, 0.5);
     },
   };
 }

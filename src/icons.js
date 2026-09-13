@@ -42,6 +42,13 @@ const P = {
   expand: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
   check: '<path d="M4.5 12.5l5 5L19.5 7"/>',
   hourglass: '<path d="M6 3.5h12M6 20.5h12M8 3.5v4l4 4 4-4v-4M8 20.5v-4l4-4 4 4v4"/>',
+  fish: '<path d="M3 12c3.5-4 7.5-5.5 12-3.5 2 1 3.5 2.3 4.5 3.5-1 1.2-2.5 2.5-4.5 3.5-4.5 2-8.5.5-12-3.5z"/><path d="M15.5 8.5l2-3.5 1 3M15.5 15.5l2 3.5 1-3"/><circle cx="8" cy="11.5" r="1" fill="currentColor" stroke="none"/>',
+  rod: '<path d="M4 21c0-9 5-16 15-18.5"/><path d="M19 2.5v4M19 6.5c-3 .5-5 2-6.5 4.5"/><circle cx="19" cy="10" r="1.4" fill="currentColor" stroke="none"/><path d="M17.6 11.4l-3 3"/>',
+  ghost: '<path d="M5 21V11a7 7 0 0114 0v10l-2.3-1.8-2.4 1.8-2.3-1.8L9.7 21l-2.4-1.8z"/><circle cx="9.5" cy="10.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="10.5" r="1.1" fill="currentColor" stroke="none"/><path d="M10.5 14.5h3"/>',
+  trophy: '<path d="M7 4h10v5a5 5 0 01-10 0z"/><path d="M7 5H4v2a3.5 3.5 0 003.5 3.5M17 5h3v2a3.5 3.5 0 01-3.5 3.5M12 14v3.5M8.5 20.5h7M9.5 17.5h5"/>',
+  snow: '<path d="M12 2v20M4 6.5l16 11M20 6.5l-16 11M12 5l2-2M12 5l-2-2M12 19l2 2M12 19l-2 2"/>',
+  cauldron: '<path d="M4 12h16v2.5a7 7 0 01-7 7h-2a7 7 0 01-7-7z"/><path d="M4 12c-1.5-1-1.5-2.5 0-3M20 12c1.5-1 1.5-2.5 0-3M8.5 15.5c-1-.8-1-2.2 0-3M15.5 15.5c1-.8 1-2.2 0-3"/><path d="M9 6.5c.8-1.2 2.2-1.2 3 0s2.2 1.2 3 0"/>',
+  boot: '<path d="M8 3.5h5v9c0 1.5 1 2.5 3 3l3 1.5v3.5H8l-1.5-3z"/><path d="M8 8h5"/>',
 };
 
 /** Zwraca gotowy SVG jako string. size — rozmiar w px. */

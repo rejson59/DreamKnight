@@ -46,9 +46,21 @@ export class UI {
     $('btn-respawn').onclick = () => this.game.respawn();
     $('btn-finale-close').onclick = () => { $('finale-screen').classList.add('hidden'); this.game.resume(); };
     $('btn-potion').onclick = () => this.game.player.drinkPotion(this.game);
-    $('btn-spell').onclick = () => this.game.player.castFireball(this.game);
+    $('btn-spell').onclick = () => this.game.player.castSelected(this.game);
+    $('btn-spell').oncontextmenu = (e) => { e.preventDefault(); this.game.player.cycleSpell(this.game); };
+    $('btn-spell').ondblclick = (e) => { e.preventDefault(); this.game.player.cycleSpell(this.game); };
     $('btn-torch').onclick = () => this.game.player.toggleTorch(this.game);
     $('btn-horse').onclick = () => this.game.player.mount(this.game);
+    $('btn-bigmap').onclick = () => this.toggleBigMap();
+    $('btn-ach').onclick = () => this.game.achv?.toggle();
+    $('btn-ach-menu').onclick = () => { this.game.audio.play('click'); this.game.achv?.toggle(true); };
+    $('btn-ach-pause').onclick = () => { this.game.audio.play('click'); this.game.achv?.toggle(true); };
+    $('btn-ach-close').onclick = () => this.game.achv?.toggle(false);
+    $('btn-bigmap-close').onclick = () => this.toggleBigMap(false);
+    $('map-toggle').ondblclick = () => this.toggleBigMap();
+    // wielka mapa: klik = punkt nawigacji
+    $('bigmap-canvas').onclick = (e) => this.bigMapClick(e);
+    this.updateSpellBadge();
     $('cut-skip').onclick = () => this.game.cutscene.skip();
     $('quality2').onchange = (e) => this.game.setQuality(e.target.value);
     this.renderMute();
@@ -324,7 +336,9 @@ export class UI {
         p.inv.add(id);
         if (it.spell) {
           p.inv.learnSpell(it.spell);
-          this.toast(`Nauczono: ${it.spell === 'fireball' ? 'Kula Ognia (F)' : 'Leczenie'}!`, 'quest');
+          const names = { fireball: 'Kula Ognia', heal: 'Leczenie', ice: 'Kula Lodu' };
+          this.toast(`Nauczono: ${names[it.spell] || it.spell}! (F — rzuć, G — zmień)`, 'quest');
+          this.updateSpellBadge();
         }
         this.game.audio.play('coin');
         this.toast(`Kupiono: ${it.name}`);
@@ -334,29 +348,31 @@ export class UI {
       row.appendChild(btn);
       list.appendChild(row);
     }
-    // skup: skóry i mięso u kupców
-    if (this.shopId.startsWith('merchant')) {
-      for (const [sid, label] of [['wolf_pelt', 'skóry wilka'], ['venison', 'dzikie mięso'], ['herb_sun', 'słoneczne ziele']]) {
-        const n = p.inv.count(sid);
-        if (!n) continue;
-        const row = document.createElement('div');
-        row.className = 'shop-item';
-        row.innerHTML = `<div class="icon t-${ITEMS[sid].type}">${icon(ITEMS[sid].icon, 30)}</div>
-          <div class="info"><div class="name">Sprzedaj: ${label} (${n}x)</div>
-          <div class="desc">Skup po ${ITEMS[sid].price} zł za sztukę</div></div>
-          <div class="price">+${n * ITEMS[sid].price} zł</div>`;
-        const btn = document.createElement('button');
-        btn.className = 'btn gold';
-        btn.textContent = 'Sprzedaj';
-        btn.onclick = () => {
-          p.inv.remove(sid, n);
-          p.addGold(n * ITEMS[sid].price);
-          this.game.audio.play('coin');
-          this.renderShop();
-        };
-        row.appendChild(btn);
-        list.appendChild(row);
-      }
+    // skup — każdy sklep ma listę towarów, które odkupi
+    const sells = shop.sells || (this.shopId.startsWith('merchant')
+      ? ['wolf_pelt', 'venison', 'herb_sun']
+      : []);
+    for (const sid of sells) {
+      const n = p.inv.count(sid);
+      if (!n) continue;
+      const row = document.createElement('div');
+      row.className = 'shop-item';
+      row.innerHTML = `<div class="icon t-${ITEMS[sid].type}">${icon(ITEMS[sid].icon, 30)}</div>
+        <div class="info"><div class="name">Sprzedaj: ${ITEMS[sid].name} (${n}x)</div>
+        <div class="desc">Skup po ${ITEMS[sid].price} zł za sztukę</div></div>
+        <div class="price">+${n * ITEMS[sid].price} zł</div>`;
+      const btn = document.createElement('button');
+      btn.className = 'btn gold';
+      btn.textContent = 'Sprzedaj';
+      btn.onclick = () => {
+        p.inv.remove(sid, n);
+        p.addGold(n * ITEMS[sid].price);
+        this.game.audio.play('coin');
+        this.toast(`Sprzedano ${n}x ${ITEMS[sid].name} za ${n * ITEMS[sid].price} zł`, 'gold');
+        this.renderShop();
+      };
+      row.appendChild(btn);
+      list.appendChild(row);
     }
   }
 
@@ -374,15 +390,16 @@ export class UI {
     const b = p.inv.bonus();
     $('inv-stats').innerHTML =
       `Zdrowie <b>${Math.ceil(p.hp)}/${p.maxHpTotal}</b> &nbsp; Atak <b>${p.atk}</b> &nbsp; Obrona <b>${p.def}</b> &nbsp; Złoto <b>${p.gold}</b> &nbsp; Poziom <b>${p.level}</b>` +
-      (p.inv.spells.length ? `<br/>Zaklęcia: <b>${p.inv.spells.map((s) => s === 'fireball' ? 'Kula Ognia (F)' : 'Leczenie').join(', ')}</b>` : '');
+      (p.inv.spells.length ? `<br/>Zaklęcia: <b>${p.inv.spells.map((s) => ({ fireball: 'Kula Ognia', ice: 'Kula Lodu', heal: 'Leczenie' })[s] || s).join(', ')} (G — zmiana)</b>` : '');
     // sloty
     const slots = $('equip-slots');
     slots.innerHTML = '';
     for (const [slot, label] of [['weapon', 'Broń'], ['armor', 'Zbroja'], ['amulet', 'Amulet']]) {
       const id = p.inv.equipped(slot);
+      const upg = slot === 'weapon' && id ? (p.weaponUpg?.[id] || 0) : 0;
       const d = document.createElement('div');
       d.className = 'equip-slot' + (id ? ' filled' : '');
-      d.innerHTML = `<div class="slot-name">${label}</div>${id ? `<div class="eq-item t-${ITEMS[id].type}">${icon(ITEMS[id].icon, 20)}<span>${ITEMS[id].name}</span></div>` : '<i>puste</i>'}`;
+      d.innerHTML = `<div class="slot-name">${label}</div>${id ? `<div class="eq-item t-${ITEMS[id].type}">${icon(ITEMS[id].icon, 20)}<span>${ITEMS[id].name}${upg ? ` <b class="upg">+${upg}</b>` : ''}</span></div>` : '<i>puste</i>'}`;
       if (id) d.onclick = () => { p.inv.unequip(slot); this.game.audio.play('click'); p.updateWeaponMesh(); this.renderInventory(); };
       slots.appendChild(d);
     }
@@ -423,8 +440,9 @@ export class UI {
     } else if (it.type === 'spell') {
       if (!p.inv.spells.includes(it.spell)) {
         p.inv.learnSpell(it.spell);
-        this.toast(`Nauczono zaklęcia!`, 'quest');
+        this.toast(`Nauczono zaklęcia! (F — rzuć, G — zmień zaklęcie)`, 'quest');
         this.game.audio.play('quest');
+        this.updateSpellBadge();
       }
     } else if (id === 'torch') {
       p.toggleTorch(this.game);
@@ -487,22 +505,42 @@ export class UI {
   }
 
   // ---------- MINIMAPA ----------
-  buildStaticMap() {
+  buildStaticMap(S = null) {
     const cv = $('minimap');
-    const S = cv ? cv.width : 150;
+    if (!S) S = cv ? cv.width : 150;
+    const big = S >= 300; // wielka mapa: rysuj etykiety
     const c = document.createElement('canvas');
     c.width = c.height = S;
     const x = c.getContext('2d');
     const W = WORLD_SIZE;
     const px = (wx) => ((wx + W / 2) / W) * S;
+    const u = S / 150; // jednostka skalowana (grubość linii itd.)
+    const label = (wx, wz, text, color = '#f0e8d0', dy = -3) => {
+      if (!big) return;
+      x.font = `${Math.max(9, 10 * u)}px "Segoe UI", system-ui, sans-serif`;
+      x.textAlign = 'center';
+      x.lineWidth = 3 * u;
+      x.strokeStyle = 'rgba(10,14,20,0.85)';
+      x.strokeText(text, px(wx), px(wz) + dy * u);
+      x.fillStyle = color;
+      x.fillText(text, px(wx), px(wz) + dy * u);
+    };
     // tło
     x.fillStyle = '#223a1e'; x.fillRect(0, 0, S, S);
     // góry
     x.fillStyle = '#6a6a75';
     x.fillRect(0, 0, S, px(-125) - 0);
+    if (big) x.fillStyle = 'rgba(240,240,248,0.5)', x.font = 'bold 11px system-ui', x.textAlign = 'center', x.fillText('GÓRY MGLISTE', S * 0.55, px(-190));
+    // bagna (przed lasem — zachód)
+    x.fillStyle = '#33422c';
+    x.beginPath(); x.ellipse(px(-185), px(215), 26, 22, 0.4, 0, 7); x.fill();
+    x.fillStyle = '#28402f';
+    x.beginPath(); x.arc(px(-196), px(228), 6, 0, 7); x.fill();
+    label(-185, 210, 'MROCZNE BAGNA', '#b8e0a8');
     // las
     x.fillStyle = '#1d4a3a';
     x.beginPath(); x.ellipse(px(190), px(40), 30, 26, 0, 0, 7); x.fill();
+    label(190, 8, 'MAGICZNY LAS', '#a8e0c8');
     // staw
     x.fillStyle = '#2a7a9a';
     x.beginPath(); x.arc(px(208), px(96), 5, 0, 7); x.fill();
@@ -518,6 +556,7 @@ export class UI {
     // zamek
     x.fillStyle = '#c9a83c';
     x.fillRect(px(-14), px(-66), px(16) - px(-14), px(-38) - px(-66));
+    label(-6, -70, 'KRÓLESTWO', '#ffe9b0');
     // ulica miejska
     x.strokeStyle = '#8a8a95'; x.lineWidth = 1.5;
     x.beginPath(); x.moveTo(px(0), px(-38)); x.lineTo(px(0), px(86)); x.stroke();
@@ -536,27 +575,162 @@ export class UI {
     road([[58, 188], [100, 192], [140, 196], [140, 238]]);          // ruiny
     road([[190, 140], [150, 80], [140, 0], [120, -70], [95, -140], [60, -185], [42, -203]]); // szlak północny
     road([[40, -205], [30, -226], [20, -244]]);                     // szczyt zguby
+    road([[-140, 160], [-140, 197], [-162, 199]]);                  // na bagna
     // jaskinia
     x.fillStyle = '#3a3a44';
     x.beginPath(); x.arc(px(-196), px(62), 6, 0, 7); x.fill();
+    label(-196, 50, 'Jaskinia', '#d8d8e0');
     // obóz goblinów
     x.fillStyle = '#7a3a1e';
     x.beginPath(); x.arc(px(40), px(-205), 4, 0, 7); x.fill();
     // farma i młyn
     x.fillStyle = '#7ac17a';
     x.beginPath(); x.arc(px(-44), px(176), 4, 0, 7); x.fill();
+    label(-44, 164, 'Farma', '#d8f0c0');
     x.fillStyle = '#c9a83c';
     x.beginPath(); x.arc(px(62), px(196), 4, 0, 7); x.fill();
+    label(62, 186, 'Młyn', '#ffe9b0');
+    // chatka Morweny
+    x.fillStyle = '#8a5adf';
+    x.beginPath(); x.arc(px(-166), px(198), 3.5, 0, 7); x.fill();
+    label(-166, 188, 'Morwena', '#d0b0ff');
     // tablica zleceń
     x.fillStyle = '#ffd75e';
     x.beginPath(); x.arc(px(-6), px(24), 2.5, 0, 7); x.fill();
     // Zapomniane Ruiny
     x.fillStyle = '#8a4adf';
     x.beginPath(); x.arc(px(140), px(240), 5, 0, 7); x.fill();
+    label(140, 230, 'Ruiny', '#d0b0ff');
     // Szczyt Zguby (arena bossa)
     x.fillStyle = '#e02020';
     x.beginPath(); x.arc(px(20), px(-248), 5, 0, 7); x.fill();
+    label(20, -238, 'Szczyt Zguby', '#ff9a8a');
     this.mapStatic = c;
+    this.mapStaticBig = null; // zresetuj cache wielkiej mapy
+  }
+
+  buildStaticMapBig() {
+    if (this.mapStaticBig) return this.mapStaticBig;
+    this.buildStaticMap(Math.min(560, Math.max(360, Math.floor(Math.min(innerWidth, innerHeight) * 0.82))));
+    this.mapStaticBig = this.mapStatic;
+    // przywróć wersję minimapy (mapStatic jest współdzielony)
+    this.buildStaticMap();
+    return this.mapStaticBig;
+  }
+
+  toggleBigMap(force) {
+    const el = $('bigmap');
+    if (!el) return;
+    const show = force !== undefined ? force : el.classList.contains('hidden');
+    el.classList.toggle('hidden', !show);
+    this.game.audio.play('click');
+    if (show) {
+      this.game.input.uiOpen = true;
+      this.game.input.unlock?.();
+      this.drawBigMap();
+    } else {
+      this.game.input.uiOpen = this.game.ui.dialogOpen ||
+        !($('inventory').classList.contains('hidden')) ||
+        !($('quests-panel').classList.contains('hidden')) ||
+        !($('shop').classList.contains('hidden')) ||
+        !($('achievements').classList.contains('hidden'));
+    }
+  }
+
+  drawBigMap() {
+    const cv = $('bigmap-canvas');
+    if (!cv || !this.game.player) return;
+    const S = cv.width;
+    const base = this.buildStaticMapBig();
+    const x = cv.getContext('2d');
+    x.clearRect(0, 0, S, S);
+    x.drawImage(base, 0, 0, S, S);
+    const W = WORLD_SIZE;
+    const px = (wx) => ((wx + W / 2) / W) * S;
+    const p = this.game.player;
+    const dot = (wx, wz, color, r = 3) => {
+      x.fillStyle = color;
+      x.beginPath(); x.arc(px(wx), px(wz), r, 0, 7); x.fill();
+    };
+    // wrogowie (z mapą królestwa: wszyscy; bez: ci blisko gracza)
+    const hasMap = p.inv.hasMap;
+    for (const e of this.game.creatures.enemies) {
+      if (e.dead) continue;
+      const d = Math.hypot(e.rig.group.position.x - p.group.position.x, e.rig.group.position.z - p.group.position.z);
+      if (d < 90 || hasMap) dot(e.rig.group.position.x, e.rig.group.position.z, e.boss ? '#ff2222' : '#ff6b5e', e.boss ? 5 : 3);
+    }
+    // NPC-e z markerami zadań
+    for (const n of this.game.npcs.npcs) {
+      const m = this.game.quests.markerFor(n.id);
+      if (m) dot(n.rig.group.position.x, n.rig.group.position.z, m === '?' ? '#8fd18f' : '#ffd75e', 4.5);
+    }
+    // cel zadania
+    const qid = this.game.quests.tracked;
+    if (qid) {
+      const target = this.questTarget(qid);
+      if (target) {
+        const t = performance.now() / 400;
+        x.strokeStyle = '#ffd75e'; x.lineWidth = 3;
+        x.beginPath(); x.arc(px(target.x), px(target.z), 8 + Math.sin(t) * 3, 0, 7); x.stroke();
+        dot(target.x, target.z, '#ffd75e', 5);
+      }
+    }
+    // punkt nawigacji gracza
+    if (this.game.waypoint) {
+      const wp = this.game.waypoint;
+      x.strokeStyle = '#4aa8ff'; x.lineWidth = 3;
+      x.beginPath(); x.arc(px(wp.x), px(wp.z), 9, 0, 7); x.stroke();
+      dot(wp.x, wp.z, '#4aa8ff', 4);
+      const d = Math.hypot(wp.x - p.group.position.x, wp.z - p.group.position.z) | 0;
+      x.font = 'bold 12px system-ui'; x.textAlign = 'center';
+      x.fillStyle = '#bfe0ff';
+      x.fillText(`${d} m`, px(wp.x), px(wp.z) - 13);
+    }
+    // gracz — strzałka
+    x.save();
+    x.translate(px(p.group.position.x), px(p.group.position.z));
+    x.rotate(Math.atan2(Math.sin(p.group.rotation.y), -Math.cos(p.group.rotation.y)));
+    x.fillStyle = '#ffe9b0';
+    x.strokeStyle = '#000'; x.lineWidth = 2;
+    x.beginPath(); x.moveTo(0, -10); x.lineTo(7, 7); x.lineTo(0, 3.5); x.lineTo(-7, 7); x.closePath();
+    x.fill(); x.stroke();
+    x.restore();
+  }
+
+  bigMapClick(e) {
+    const cv = $('bigmap-canvas');
+    if (!cv) return;
+    const r = cv.getBoundingClientRect();
+    const mx = (e.clientX - r.left) / r.width * cv.width;
+    const my = (e.clientY - r.top) / r.height * cv.height;
+    const W = WORLD_SIZE;
+    const wx = (mx / cv.width) * W - W / 2;
+    const wz = (my / cv.height) * W - W / 2;
+    // klik w istniejący punkt = usuń
+    if (this.game.waypoint && Math.hypot(this.game.waypoint.x - wx, this.game.waypoint.z - wz) < 14) {
+      this.game.waypoint = null;
+      this.game.audio.play('click');
+      this.drawBigMap();
+      return;
+    }
+    this.game.waypoint = { x: wx, z: wz };
+    this.game.audio.play('click');
+    this.game.ui.toast('Cel podróży ustawiony — widoczny na minimapie (M — mapa).', 'gold');
+    this.drawBigMap();
+  }
+
+  updateSpellBadge() {
+    const btn = $('btn-spell');
+    const p = this.game.player;
+    if (!btn || !p) return;
+    const names = { fireball: ['Kula Ognia', 'flame'], ice: ['Kula Lodu', 'snow'], heal: ['Leczenie', 'heart'] };
+    const known = p.inv.spells;
+    if (!known.length) { btn.title = 'Zaklęcie (F) — kup księgę u czarodzieja'; return; }
+    if (!known.includes(p.selectedSpell)) p.selectedSpell = known[0];
+    const [name, ic] = names[p.selectedSpell] || names.fireball;
+    const badgeTxt = known.length > 1 ? String(known.indexOf(p.selectedSpell) + 1) : '';
+    btn.innerHTML = icon(ic, 23) + `<span id="spell-badge" class="spell-badge">${badgeTxt}</span>`;
+    btn.title = `${name} (F — rzuć, G — zmień zaklęcie)`;
   }
 
   drawMinimap() {
@@ -606,6 +780,13 @@ export class UI {
         dot(target.x, target.z, '#ffd75e', 3);
       }
     }
+    // punkt nawigacji z wielkiej mapy
+    if (this.game.waypoint) {
+      const wp = this.game.waypoint;
+      x.strokeStyle = '#4aa8ff'; x.lineWidth = 1.6;
+      x.beginPath(); x.arc(px(wp.x), px(wp.z), pulse, 0, 7); x.stroke();
+      dot(wp.x, wp.z, '#4aa8ff', 2.5);
+    }
     // gracz — strzałka
     const pxx = px(p.group.position.x), pzz = px(p.group.position.z);
     x.save();
@@ -638,6 +819,9 @@ export class UI {
       s4_herbs: st === 'turnin' ? { x: 28, z: -12 } : { x: 40, z: 210 },
       s5_boars: st === 'turnin' ? { x: -44, z: 168 } : { x: -20, z: 220 },
       s6_letter: { x: -14, z: 4 },
+      q9_swamp: st === 'turnin' ? { x: -166, z: 198 } : { x: -185, z: 215 },
+      s7_herbs: st === 'turnin' ? { x: -166, z: 198 } : { x: -196, z: 228 },
+      s8_fishing: st === 'turnin' ? { x: 62, z: 188 } : { x: 208, z: 96 },
     };
     return spots[qid] || null;
   }

@@ -51,7 +51,8 @@
         <button id="btn-continue" class="btn gold big hidden">Kontynuuj przygodę</button>
         <button id="btn-help" class="btn ghost">Sterowanie / pomoc</button>
         <button id="btn-tutorial" class="btn ghost">Samouczek</button>
-        <p class="version">v2.2 • PC / tablet / telefon • postęp zapisuje się automatycznie</p>
+        <button id="btn-ach-menu" class="btn ghost"><span class="btn-ic" data-icon="trophy" data-size="18"></span>Osiągnięcia</button>
+        <p class="version">v3.0 „Mroczne Bagna” • PC / tablet / telefon • postęp zapisuje się automatycznie</p>
       </div>
     </div>
 
@@ -70,12 +71,16 @@
           <div><kbd>I</kbd> / <kbd>J</kbd></div><div>ekwipunek / zadania</div>
           <div><kbd>F</kbd> / <kbd>R</kbd></div><div>kula ognia (zaklęcie) / wypij miksturę</div>
           <div><kbd>T</kbd> / <kbd>H</kbd></div><div>pochodnia / dosiądź konia</div>
+          <div><kbd>M</kbd></div><div>wielka mapa (klik ustawia cel podróży)</div>
+          <div><kbd>F</kbd> / <kbd>G</kbd></div><div>rzuć zaklęcie / zmień zaklęcie</div>
+          <div>Wędkowanie</div><div>stań nad wodą z wędką → <kbd>E</kbd> zarzuć → <kbd>E</kbd> gdy ryba bierze!</div>
           <div><kbd>Esc</kbd></div><div>pauza / menu</div>
           <div class="help-h">Telefon / tablet</div><div></div>
           <div>Joystick (lewy dół)</div><div>ruch (pchnij do końca = bieg)</div>
           <div>Przeciąganie (prawa strona)</div><div>kamera</div>
           <div>Przyciski miecza i dymku</div><div>atak / interakcja</div>
           <div>Przyciski plecaka i zwoju</div><div>ekwipunek / zadania</div>
+          <div>Przycisk mapy</div><div>wielka mapa (puknij dwukrotnie minimapę)</div>
         </div>
         <button id="btn-help-close" class="btn primary">Zamknij</button>
       </div>
@@ -128,13 +133,15 @@
       <div id="hud-buttons">
         <button class="hud-btn" id="btn-inventory" title="Ekwipunek (I)" data-icon="backpack" data-size="24"></button>
         <button class="hud-btn" id="btn-quests" title="Zadania (J)" data-icon="scroll" data-size="24"></button>
+        <button class="hud-btn" id="btn-bigmap" title="Wielka mapa (M)" data-icon="map" data-size="24"></button>
+        <button class="hud-btn" id="btn-ach" title="Osiągnięcia" data-icon="trophy" data-size="24"></button>
         <button class="hud-btn" id="btn-menu" title="Menu (Esc)" data-icon="menu" data-size="24"></button>
         <button class="hud-btn" id="btn-fullscreen" title="Pełny ekran" data-icon="expand" data-size="22"></button>
       </div>
 
       <div id="quick-slots" class="hidden">
         <button class="quick-btn" id="btn-potion" title="Mikstura (R)" data-icon="potion" data-size="23"></button>
-        <button class="quick-btn" id="btn-spell" title="Kula ognia (F)" data-icon="flame" data-size="23"></button>
+        <button class="quick-btn" id="btn-spell" title="Kula ognia (F)" data-icon="flame" data-size="23"><span id="spell-badge" class="spell-badge"></span></button>
         <button class="quick-btn" id="btn-torch" title="Pochodnia (T)" data-icon="torch" data-size="23"></button>
         <button class="quick-btn" id="btn-horse" title="Koń (H)" data-icon="horse" data-size="23"></button>
       </div>
@@ -217,9 +224,33 @@
         </div>
         <button class="btn ghost" id="btn-pause-help">Pomoc</button>
         <button class="btn ghost" id="btn-pause-tutorial">Samouczek</button>
+        <button class="btn ghost" id="btn-ach-pause"><span class="btn-ic" data-icon="trophy" data-size="18"></span>Osiągnięcia i statystyki</button>
         <button class="btn danger" id="btn-quit">Wyjdź do menu</button>
       </div>
     </div>
+
+    <!-- WIELKA MAPA -->
+    <div id="bigmap" class="overlay full hidden">
+      <div class="menu-panel bigmap-panel">
+        <h2>Mapa królestwa</h2>
+        <canvas id="bigmap-canvas" width="560" height="560"></canvas>
+        <p class="bigmap-tip">Kliknij mapę, aby ustawić cel podróży (niebieski znacznik). Drugi klik w znacznik go usuwa.</p>
+        <button class="btn primary" id="btn-bigmap-close">Zamknij (M)</button>
+      </div>
+    </div>
+
+    <!-- OSIĄGNIĘCIA -->
+    <div id="achievements" class="overlay full hidden">
+      <div class="menu-panel wide ach-panel">
+        <h2>Osiągnięcia</h2>
+        <p id="ach-count">0/0 odblokowanych</p>
+        <div id="ach-list" class="ach-list"></div>
+        <button class="btn ghost" id="btn-ach-close">Zamknij</button>
+      </div>
+    </div>
+
+    <!-- WĘDKOWANIE -->
+    <div id="fishing-hud" class="hidden"></div>
 
     <!-- ŚMIERĆ -->
     <div id="death-screen" class="overlay full hidden">

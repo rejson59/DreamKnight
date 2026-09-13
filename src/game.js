@@ -11,6 +11,8 @@ import { AudioSys } from './audio.js';
 import { CutsceneManager } from './cutscene.js';
 import { FXSystem } from './fx.js';
 import { makeTextures } from './textures.js';
+import { Fishing } from './fishing.js';
+import { Achievements } from './achievements.js';
 import { SAVE_KEY, QUALITY_PRESETS, detectQuality, LOC } from './config.js';
 import { ITEMS } from './items.js';
 
@@ -20,6 +22,7 @@ const BOUNTIES = [
   { kind: 'boar', name: 'Dziki', where: 'południowe łąki', need: 4, reward: 100 },
   { kind: 'goblin', name: 'Gobliny', where: 'Góry Mgliste', need: 6, reward: 180 },
   { kind: 'skeleton', name: 'Szkielety', where: 'Zapomniane Ruiny', need: 5, reward: 220, req: 'q7_ruins' },
+  { kind: 'wraith', name: 'Duchy', where: 'Mroczne Bagna', need: 4, reward: 260, req: 'q9_swamp' },
 ];
 
 export class Game {
@@ -34,11 +37,14 @@ export class Game {
     this.fpsAcc = 0; this.fpsN = 0; this.fpsT = 0;
     this.govAcc = 0; this.govN = 0; this.govT = 0; this.dynScale = 1;
     this.hintCd = 0;
-    this.chestLooted = { bed: false, goblin: false, cave: false };
+    this.chestLooted = { bed: false, goblin: false, cave: false, swamp: false };
     this.cutsceneActive = false;
     this.trauma = 0;
     this._cutFlags = {};
     this.bounty = null;
+    this.fishing = null;   // utworzone w init()
+    this.achv = null;      // utworzone w init()
+    this.waypoint = null;  // cel podróży ustawiony na wielkiej mapie
   }
 
   async init(onProgress) {
@@ -96,7 +102,9 @@ export class Game {
     this.input.onInventory = () => this.ui.toggleInventory();
     this.input.onQuests = () => this.ui.toggleQuests();
     this.input.onPotion = () => this.player.drinkPotion(this);
-    this.input.onSpell = () => this.player.castFireball(this);
+    this.input.onSpell = () => this.player.castSelected(this);
+    this.input.onCycleSpell = () => this.player.cycleSpell(this);
+    this.input.onMap = () => this.ui.toggleBigMap();
     this.input.onTorch = () => this.player.toggleTorch(this);
     this.input.onHorse = () => this.player.mount(this);
     this.input.onZoom = (d) => {
@@ -104,6 +112,8 @@ export class Game {
     };
     this.ui.init();
     this.ui.refreshQuestMarkers();
+    this.fishing = new Fishing(this);
+    this.achv = new Achievements(this);
 
     addEventListener('resize', () => this.resize());
     this.resize();
@@ -195,8 +205,10 @@ export class Game {
     this.audio.play('quest');
     this.player.reset(true);
     this.quests = new QuestManager(this);
-    this.chestLooted = { bed: false, goblin: false, cave: false };
+    this.chestLooted = { bed: false, goblin: false, cave: false, swamp: false };
     this.bounty = null;
+    this.achv?.reset();
+    this.waypoint = null;
     this.world.dayT = 0.32;
     this.ui.refreshQuestMarkers();
     this.startPlaying();
@@ -249,6 +261,8 @@ export class Game {
     this.ui.toggleQuests(false);
     this.ui.closeShop();
     this.ui.closeDialogue();
+    this.ui.toggleBigMap(false);
+    this.achv?.toggle(false);
     this.state = 'playing';
     this.input.enabled = true;
     this.input.uiOpen = false;
@@ -260,11 +274,15 @@ export class Game {
     if (this.state === 'playing') {
       if (this.ui.dialogOpen || !document.getElementById('inventory').classList.contains('hidden') ||
         !document.getElementById('quests-panel').classList.contains('hidden') ||
-        !document.getElementById('shop').classList.contains('hidden')) {
+        !document.getElementById('shop').classList.contains('hidden') ||
+        !document.getElementById('bigmap').classList.contains('hidden') ||
+        !document.getElementById('achievements').classList.contains('hidden')) {
         this.ui.toggleInventory(false);
         this.ui.toggleQuests(false);
         this.ui.closeShop();
         this.ui.closeDialogue();
+        this.ui.toggleBigMap(false);
+        this.achv?.toggle(false);
       } else this.pause();
     } else if (this.state === 'paused') this.resume();
   }
@@ -302,7 +320,8 @@ export class Game {
     document.getElementById('finale-text').textContent = epic
       ? `MROCZNY RYCERZ POKONANY! Król Aldric mianował Cię LEGENDĄ KRÓLESTWA! ` +
         `Ciemność pierzchła, a Twoje imię będą śpiewać bardowie przez pokolenia. ` +
-        `Zebrane złoto: ${this.player.gold} zł • Poziom: ${this.player.level}. Przygoda trwa dalej — eksploruj świat!`
+        `Zebrane złoto: ${this.player.gold} zł • Poziom: ${this.player.level}. ` +
+        `Lecz moc Mrocznego uciekła na Mroczne Bagna… król ma dla Ciebie nowe zadanie!`
       : `Król Aldric mianował Cię BOHATEREM KORONY! Królestwo jest bezpieczne dzięki Twojemu męstwu. ` +
         `Zebrane złoto: ${this.player.gold} zł • Poziom: ${this.player.level}. Przygoda trwa dalej — eksploruj świat!`;
     document.getElementById('finale-screen').classList.remove('hidden');
@@ -313,7 +332,7 @@ export class Game {
   shake(amount = 0.3) { this.trauma = Math.min(1, (this.trauma || 0) + amount); }
 
   zoneName() {
-    const names = { kingdom: 'Królestwo', castle: 'Zamek Królewski', market: 'Rynek', tavern: 'Karczma „Złoty Kufel”', farm: 'Farma', forest: 'Magiczny Las', mountains: 'Góry Mgliste', cave: 'Mroczna Jaskinia', wild: 'Dzicz', ruins: 'Zapomniane Ruiny', arena: 'Szczyt Zguby' };
+    const names = { kingdom: 'Królestwo', castle: 'Zamek Królewski', market: 'Rynek', tavern: 'Karczma „Złoty Kufel”', farm: 'Farma', forest: 'Magiczny Las', mountains: 'Góry Mgliste', cave: 'Mroczna Jaskinia', wild: 'Dzicz', ruins: 'Zapomniane Ruiny', arena: 'Szczyt Zguby', swamp: 'Mroczne Bagna' };
     return names[this.zone] || '';
   }
 
@@ -335,6 +354,18 @@ export class Game {
         map: this.textures.flame, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       }));
       mesh.scale.set(1, 1.3, 1);
+    } else if (kind === 'icebolt') {
+      // kula lodu — kryształ z poświatą
+      mesh = new THREE.Group();
+      const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.22),
+        new THREE.MeshStandardMaterial({ color: 0xaee8ff, emissive: 0x3399dd, emissiveIntensity: 1.6, roughness: 0.2 }));
+      mesh.add(core);
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: this.textures.soft, color: 0x88ddff, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending,
+      }));
+      halo.scale.set(1.1, 1.1, 1);
+      mesh.add(halo);
+      mesh.scale.set(1, 1.15, 1);
     } else {
       mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.7, 6),
         new THREE.MeshStandardMaterial({ color: 0x8a6a3a }));
@@ -344,7 +375,7 @@ export class Game {
     this.scene.add(mesh);
     this.projectiles.push({
       kind, mesh, dmg,
-      vel: dir.multiplyScalar(kind === 'fireball' ? 22 : 34),
+      vel: dir.multiplyScalar(kind === 'fireball' ? 22 : kind === 'icebolt' ? 26 : 34),
       life: 2.2,
     });
   }
@@ -358,10 +389,14 @@ export class Game {
         const s = 1 + Math.sin(this.t * 20) * 0.15;
         pr.mesh.scale.set(s, s * 1.3, 1);
       }
+      if (pr.kind === 'icebolt') {
+        pr.mesh.rotation.y += dt * 14;
+        pr.mesh.rotation.x += dt * 7;
+      }
       const mp = pr.mesh.position;
       let dead = pr.life <= 0;
       // trafienie wroga
-      if (!dead && this.creatures.projectileHit(mp.x, mp.y, mp.z, pr.dmg, this)) {
+      if (!dead && this.creatures.projectileHit(mp.x, mp.y, mp.z, pr.dmg, this, pr.kind)) {
         this.audio.play(pr.kind === 'fireball' ? 'explode' : 'hit');
         this.ui.hitMarker();
         dead = true;
@@ -369,6 +404,10 @@ export class Game {
       // ziemia / przeszkoda
       if (!dead && mp.y <= this.world.walkHeight(mp.x, mp.z) + 0.1) {
         if (pr.kind === 'fireball') this.audio.play('explode');
+        if (pr.kind === 'icebolt') {
+          this.fx.burst(mp.x, mp.y + 0.2, mp.z, 0xaee8ff, 10, 2.5, 0.5);
+          this.audio.play('ice');
+        }
         dead = true;
       }
       if (dead) {
@@ -410,11 +449,15 @@ export class Game {
     // 5b. Tablica zleceń na rynku
     if (Math.hypot(-6 - p.x, 24 - p.z) < 3.4)
       return { type: 'board', label: 'Tablica zleceń' };
+    // 5c. Wędkowanie — gdy przed graczem woda i ma wędkę
+    if (this.fishing && !this.fishing.active && this.fishing.canFishHere())
+      return { type: 'fishing', label: 'Zarzuć wędkę' };
     // 6. Skrzynie
     const chests = [
       { key: 'bed', x: -14.8, z: -58.5, label: 'Otwórz skrzynię' },
       { key: 'goblin', ...this.world.goblinChestPos, label: 'Otwórz skrzynię goblinów' },
       { key: 'cave', x: LOC.caveCenter.x - 16, z: LOC.caveCenter.z + 3.2, label: 'Otwórz starożytną skrzynię' },
+      { key: 'swamp', ...this.world.swampChestPos, label: 'Otwórz bagienną skrzynię' },
     ];
     for (const c of chests) {
       if (!c.x && c.x !== 0) continue;
@@ -436,6 +479,7 @@ export class Game {
         break;
       }
       case 'board': this.showBountyBoard(); break;
+      case 'fishing': this.fishing.start(); break;
       case 'horse': p.mount(this); break;
       case 'sheep': {
         this.quests.onSpecial('lost_sheep');
@@ -472,12 +516,16 @@ export class Game {
       case 'chest': {
         this.chestLooted[it.chest] = true;
         this.audio.play('quest');
+        this.achv?.onChest();
         if (it.chest === 'bed') {
           p.addGold(30); p.inv.add('potion_s');
           this.ui.toast('Skrzynia: 30 zł + mikstura!', 'gold');
         } else if (it.chest === 'goblin') {
           p.addGold(120); p.inv.add('potion_b');
           this.ui.toast('Łup goblinów: 120 zł + duża mikstura!', 'gold');
+        } else if (it.chest === 'swamp') {
+          p.addGold(150); p.inv.add('potion_xl'); p.inv.add('wisp_essence');
+          this.ui.toast('Bagienna skrzynia: 150 zł + Eliksir Morweny + esencja ducha!', 'gold');
         } else {
           const bossDead = !this.creatures.boss || this.creatures.boss.dead;
           if (!bossDead) {
@@ -572,6 +620,7 @@ export class Game {
         dayT: this.world.dayT,
         bossDead: this.creatures.boss?.dead || false,
         bounty: this.bounty,
+        stats: this.achv?.stats || null,
         v: 2,
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -590,6 +639,7 @@ export class Game {
       this.quests.deserialize(d.quests);
       this.chestLooted = d.chests || this.chestLooted;
       this.bounty = d.bounty || null;
+      if (d.stats && this.achv) this.achv.stats = { ...this.achv.freshStats(), ...d.stats };
       this.world.dayT = d.dayT ?? 0.32;
       this.creatures.ensurePlayerHorse(this.player.inv.hasHorse);
       if (d.bossDead && this.creatures.boss) {
@@ -598,6 +648,8 @@ export class Game {
         b.rig.group.visible = false;
       }
       this.ui.refreshQuestMarkers();
+      this.achv?.check();
+      this.ui.updateSpellBadge?.();
       return true;
     } catch { return false; }
   }
@@ -636,7 +688,10 @@ export class Game {
           this.ui.hint('Ciemno! Naciśnij T, aby zapalić pochodnię (kupisz ją na rynku).', 6000);
         if (z === 'forest') this.ui.hint('Magiczny Las — tu rosną księżycowe zioła i grasują wilki.', 5000);
         if (z === 'mountains') this.ui.hint('Góry Mgliste — terytorium goblinów. Miej się na baczności!', 5000);
+        if (z === 'swamp') this.ui.hint('Mroczne Bagna — duchy krążą wokół rozlewiska. Czarownica Morwena ma tu swoją chatkę.', 7000);
       }
+      // klimat bagien: rechot żab
+      if (this.zone === 'swamp' && Math.random() < dt * 0.14) this.audio.play('frog');
       // gracz
       p.update(dt, { input: this.input, camera: this.camera, game: this, t: this.t });
       // NPC-e i stworzenia
@@ -659,11 +714,16 @@ export class Game {
       if (!this.cutsceneActive) this.updateProjectiles(dt);
       // interakcje
       if (!this.ui.dialogOpen && !this.input.uiOpen && !this.cutsceneActive) {
-        const it = this.findInteract();
-        this._interact = it;
-        this.ui.prompt(it ? it.label : null);
-        if (it && this.input.consumeInteract()) this.doInteract(it);
-        else this.input.consumeInteract();
+        if (this.fishing?.active) {
+          this.ui.prompt(null);
+          this.fishing.update(dt); // konsumuje E (branie) i atak (przerwij)
+        } else {
+          const it = this.findInteract();
+          this._interact = it;
+          this.ui.prompt(it ? it.label : null);
+          if (it && this.input.consumeInteract()) this.doInteract(it);
+          else this.input.consumeInteract();
+        }
       } else {
         this.ui.prompt(null);
         this.input.consumeInteract();

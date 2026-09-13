@@ -31,6 +31,9 @@ export const LOC = {
   crossroads: { x: 0, z: 150 },
   ruins: { x: 140, z: 240 },
   arena: { x: 20, z: -248 },
+  swamp: { x: -185, z: 215 },        // Mroczne Bagna (południowy zachód)
+  swampPond: { x: -196, z: 228 },    // bagienne rozlewisko
+  witchHut: { x: -166, z: 198 },     // chatka czarownicy Morweny
 };
 
 export const QUALITY_PRESETS = {
@@ -81,4 +84,5 @@ export const ZONE_NAMES = {
   wild: 'Dzicz',
   ruins: 'Zapomniane Ruiny',
   arena: 'Szczyt Zguby',
+  swamp: 'Mroczne Bagna',
 };

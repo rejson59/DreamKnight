@@ -388,3 +388,64 @@ kbd { background: #222d47; border: 1px solid #4a5a7a; border-bottom-width: 3px; 
 #fps-counter.fps-good { color: #8fd18f; }
 #fps-counter.fps-mid { color: var(--gold); }
 #fps-counter.fps-low { color: #ff8a7a; }
+
+/* ---------- v3: WIELKA MAPA ---------- */
+#bigmap-canvas {
+  width: min(72vw, 62vh);
+  height: min(72vw, 62vh);
+  max-width: 560px; max-height: 560px;
+  border-radius: 10px;
+  border: 2px solid var(--panel-border);
+  box-shadow: 0 0 40px rgba(0,0,0,0.6), inset 0 0 60px rgba(0,0,0,0.4);
+  cursor: crosshair;
+  background: #223a1e;
+}
+.bigmap-panel { text-align: center; }
+.bigmap-tip { color: var(--muted); font-size: 13px; margin: 10px 0 12px; }
+
+/* ---------- v3: OSIĄGNIĘCIA ---------- */
+.ach-panel { max-height: 92vh; display: flex; flex-direction: column; }
+#ach-count { color: var(--gold); margin: 4px 0 10px; letter-spacing: 0.5px; }
+.ach-list { overflow-y: auto; min-height: 120px; }
+.ach-stats { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+.ach-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.ach-card {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border: 1px solid rgba(232,182,76,0.25); border-radius: 8px;
+  background: rgba(20,26,40,0.6);
+}
+.ach-card.unlocked { border-color: rgba(232,182,76,0.65); background: rgba(50,38,14,0.55); }
+.ach-card.locked { opacity: 0.55; filter: saturate(0.4); }
+.ach-ic { color: var(--gold); flex: 0 0 auto; }
+.ach-info { flex: 1 1 auto; text-align: left; }
+.ach-name { font-weight: bold; color: var(--text); }
+.ach-desc { font-size: 12.5px; color: var(--muted); }
+.ach-mark { font-size: 18px; flex: 0 0 auto; }
+@media (min-width: 700px) { .ach-grid { grid-template-columns: 1fr 1fr; } }
+
+/* ---------- v3: WĘDKOWANIE ---------- */
+#fishing-hud {
+  position: absolute; left: 50%; top: 18%; transform: translateX(-50%);
+  padding: 10px 22px; border-radius: 10px;
+  background: rgba(8,14,24,0.85); border: 1px solid var(--panel-border);
+  color: var(--text); font-size: 16px; letter-spacing: 0.5px;
+  pointer-events: none; z-index: 60; text-align: center;
+}
+#fishing-hud.urgent {
+  color: #ffe9b0; border-color: var(--gold);
+  box-shadow: 0 0 24px rgba(232,182,76,0.55);
+  animation: fishPulse 0.5s infinite alternate;
+}
+@keyframes fishPulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.06); } }
+
+/* ---------- v3: ODZNAKA ZAKLĘCIA ---------- */
+.quick-btn { position: relative; }
+.spell-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; background: var(--gold); color: #20150a;
+  font-size: 10px; font-weight: bold; line-height: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
+.spell-badge:empty { display: none; }
+.upg { color: var(--gold); }
