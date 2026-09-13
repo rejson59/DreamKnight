@@ -56,6 +56,8 @@ export class Player {
     this.torchMesh.position.set(0, 0.1, 0.15);
 
     this.inv = new Inventory();
+    this.weaponUpg = {};        // id broni -> poziom ulepszenia (0..3)
+    this.selectedSpell = 'fireball'; // aktualnie wybrane zaklęcie (klawisz G zmienia)
     this.reset(true);
 
     this.camYaw = 0; this.camPitch = 0.32; this.camDist = 7.5;
@@ -84,6 +86,8 @@ export class Player {
     this.camYaw = 0; this.camPitch = 0.32;
     if (fresh) {
       this.inv = new Inventory();
+      this.weaponUpg = {};
+      this.selectedSpell = 'fireball';
       this.inv.add('sword_rusty'); this.inv.equip('sword_rusty');
       this.inv.add('armor_cloth'); this.inv.equip('armor_cloth');
       this.inv.add('bread', 2);
@@ -93,10 +97,47 @@ export class Player {
     this.updateWeaponMesh();
   }
 
-  get atk() { return this.baseAtk + (this.level - 1) * 2 + this.inv.bonus().atk; }
+  get atk() { return this.baseAtk + (this.level - 1) * 2 + this.inv.bonus().atk + this.weaponUpgBonus(); }
   get def() { return this.baseDef + Math.floor((this.level - 1) * 0.7) + this.inv.bonus().def; }
   get speedMul() { return 1 + this.inv.bonus().speed; }
   get maxHpTotal() { return this.maxHp + (this.level - 1) * 12 + this.inv.bonus().hp; }
+
+  // Bonus ataku z ulepszeń broni u kowala (+2 za poziom ulepszenia)
+  weaponUpgBonus() {
+    const w = this.inv.equipped('weapon');
+    return w ? ((this.weaponUpg?.[w] || 0) * 2) : 0;
+  }
+
+  upgradeWeapon(game) {
+    const w = this.inv.equipped('weapon');
+    if (!w) {
+      game.ui.toast('Najpierw założ jakąś broń (I — ekwipunek).', 'bad');
+      game.audio.play('error');
+      return;
+    }
+    const lvl = this.weaponUpg[w] || 0;
+    if (lvl >= 3) {
+      game.ui.toast('To ostrze osiągnęło kowalską doskonałość (+6).', 'gold');
+      game.audio.play('error');
+      return;
+    }
+    const costGold = 90 * (lvl + 1);
+    const costShard = lvl + 1;
+    if (this.gold < costGold || this.inv.count('crystal_shard') < costShard) {
+      game.ui.toast(`Potrzebujesz: ${costGold} zł + ${costShard}x odłamek kryształu (masz: ${this.inv.count('crystal_shard')}).`, 'bad');
+      game.audio.play('error');
+      return;
+    }
+    this.gold -= costGold;
+    this.inv.remove('crystal_shard', costShard);
+    this.weaponUpg[w] = lvl + 1;
+    game.audio.play('upgrade');
+    game.fx.burst(this.group.position.x, this.group.position.y + 1.2, this.group.position.z, 0xffaa33, 16, 4, 0.7);
+    game.fx.ring(this.group.position.x, this.group.position.y + 0.2, this.group.position.z, 0xffcc55, 3);
+    game.ui.toast(`Grimm dokuwa stalę! ${ITEMS[w]?.name || 'Broń'} ulepszona do +${this.weaponUpg[w]} (Atak +${this.weaponUpg[w] * 2}).`, 'gold');
+    game.save();
+    game.achv?.onWeaponUpgrade(this.weaponUpg[w]);
+  }
 
   addGold(n) { this.gold += n; }
   addXp(n, game) {
@@ -112,6 +153,7 @@ export class Player {
         game.ui.toast(`Poziom ${this.level}! Zdrowie i atak wzrosły.`, 'quest');
         game.fx.ring(this.group.position.x, this.group.position.y + 0.2, this.group.position.z, 0xffe27a, 4);
         game.fx.burst(this.group.position.x, this.group.position.y + 1, this.group.position.z, 0xffe27a, 24, 5, 0.9);
+        game.achv?.onLevel(this.level);
       }
     }
   }
@@ -120,6 +162,7 @@ export class Player {
   applyKnock(dx, dz) { this.knockX += dx; this.knockZ += dz; }
 
   takeDamage(amount, fromPos, game) {
+    if (game?.fishing?.active) game.fishing.cancel(null); // obrażenia płoszą ryby
     if (this.dead || this.hurtT > 0.4) return;
     const dmg = Math.max(1, Math.round(amount - this.def * 0.7));
     this.hp -= dmg;
@@ -201,8 +244,9 @@ export class Player {
       this.knockZ *= 1 - Math.min(1, dt * 6);
     }
 
-    // Ruch
-    const mv = input.moveVec();
+    // Ruch (wędkowanie blokuje poruszanie się — spokojna ręka!)
+    const fishingLock = !!game.fishing?.active;
+    const mv = fishingLock ? { x: 0, z: 0, mag: 0 } : input.moveVec();
     // Histereza sprintu: start wymaga zapasu staminy, koniec dopiero przy zerze.
     // Bez tego sprint migotał kilka razy na sekundę i postać się zacinała.
     const wantRun = input.sprinting() && mv.mag > 0.1 && !dead;
@@ -258,7 +302,7 @@ export class Player {
 
     // Skok / grawitacja
     const gy = this.world.walkHeight(this.group.position.x, this.group.position.z);
-    if (!dead && input.jumping() && this.grounded && !this.mounted) {
+    if (!dead && !fishingLock && input.jumping() && this.grounded && !this.mounted) {
       this.velY = 5.4;
       this.grounded = false;
       game.audio.play('step');
@@ -280,7 +324,7 @@ export class Player {
     }
 
     // Atak
-    if (!dead && input.consumeAttack()) this.tryAttack(ctx);
+    if (!dead && !fishingLock && input.consumeAttack()) this.tryAttack(ctx);
     if (this.atkT > 0) {
       this.atkT += dt / 0.42;
       if (this.atkT >= 1) { this.atkT = 0; this.comboWindow = 0.9; }
@@ -437,6 +481,46 @@ export class Player {
     setTimeout(() => { if (!this.dead) game.spawnProjectile('fireball', (this.atk + 14) * power); }, 280);
   }
 
+  castIce(game) {
+    if (this.stam < 20) { game.ui.toast('Za mało energii na zaklęcie!', 'bad'); return; }
+    if (this.castT > 0 || this.atkT > 0) return;
+    this.stam -= 20;
+    this.castT = 1;
+    game.audio.play('ice');
+    game.fx.burst(this.group.position.x, this.group.position.y + 1.6, this.group.position.z, 0x77ddff, 10, 3, 0.5);
+    const power = 1 + this.inv.bonus().spellPower;
+    setTimeout(() => { if (!this.dead) game.spawnProjectile('icebolt', (this.atk + 9) * power); }, 280);
+  }
+
+  // Rzuca aktualnie wybrane zaklęcie (F). G przełącza między znanymi.
+  castSelected(game) {
+    const known = this.inv.spells;
+    if (!known.length) {
+      game.ui.toast('Nie znasz żadnych zaklęć! Kup księgę u czarodzieja lub czarownicy.', 'bad');
+      game.audio.play('error');
+      return;
+    }
+    if (!known.includes(this.selectedSpell)) this.selectedSpell = known[0];
+    if (this.selectedSpell === 'fireball') return this.castFireball(game);
+    if (this.selectedSpell === 'ice') return this.castIce(game);
+    if (this.selectedSpell === 'heal') {
+      if (!this.castHeal(game)) return; // brak HP/energii — nie zmieniaj toastów
+      return;
+    }
+    return this.castFireball(game);
+  }
+
+  cycleSpell(game, dir = 1) {
+    const known = this.inv.spells;
+    if (known.length < 2) { game.ui.toast('Znasz tylko jedno zaklęcie. Kup księgi, aby mieć więcej!', ''); return; }
+    const names = { fireball: 'Kula Ognia', ice: 'Kula Lodu', heal: 'Leczenie' };
+    const i = known.indexOf(this.selectedSpell);
+    this.selectedSpell = known[(i + dir + known.length) % known.length];
+    game.audio.play('click');
+    game.ui.toast(`Wybrane zaklęcie: ${names[this.selectedSpell]} (F — rzuć)`, 'gold');
+    game.ui.updateSpellBadge();
+  }
+
   castHeal(game) {
     if (!this.inv.spells.includes('heal')) return false;
     if (this.stam < 30) { game.ui.toast('Za mało energii na zaklęcie!', 'bad'); return false; }
@@ -522,6 +606,8 @@ export class Player {
       hp: this.hp, maxHp: this.maxHp, gold: this.gold,
       pos: [this.group.position.x, this.group.position.z],
       inv: this.inv.serialize(),
+      weaponUpg: this.weaponUpg || {},
+      selectedSpell: this.selectedSpell || 'fireball',
     };
   }
   deserialize(d) {
@@ -532,6 +618,8 @@ export class Player {
       this.group.position.set(d.pos[0], this.world.walkHeight(d.pos[0], d.pos[1]), d.pos[1]);
     }
     this.inv.deserialize(d.inv);
+    this.weaponUpg = d.weaponUpg || {};
+    this.selectedSpell = d.selectedSpell || 'fireball';
     this.hp = Math.min(this.hp, this.maxHpTotal);
   }
 }

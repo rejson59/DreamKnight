@@ -3,7 +3,7 @@
 // (flaga w localStorage), można go też otworzyć z menu i pauzy.
 import { icon } from './icons.js';
 
-const KEY = 'dreamknight_tutorial_v1';
+const KEY = 'dreamknight_tutorial_v2';
 
 export function shouldShowTutorial() {
   try { return !localStorage.getItem(KEY); } catch { return true; }
@@ -44,18 +44,24 @@ function buildSlides(touch) {
     {
       icon: 'scroll', title: 'Zadania i mapa',
       text: touch
-        ? 'Przycisk zwoju — dziennik zadań. Śledzone zadanie widać u góry ekranu, a wykrzykniki nad głowami oznaczają dostępne misje. W terenie trzymaj się dróg i drogowskazów, a złoty znacznik na minimapie wskaże cel.'
-        : 'J — dziennik zadań. Śledzone zadanie widać u góry ekranu, a wykrzykniki nad głowami oznaczają dostępne misje. W terenie trzymaj się dróg i drogowskazów, a złoty znacznik na minimapie wskaże cel.',
+        ? 'Przycisk zwoju — dziennik zadań. Śledzone zadanie widać u góry ekranu, a wykrzykniki nad głowach oznaczają dostępne misje. Przycisk mapy (albo dwuklik na minimapie) otwiera wielką mapę — stuknij ją, aby ustawić cel podróży!'
+        : 'J — dziennik zadań. Śledzone zadanie widać u góry ekranu, a wykrzykniki nad głowami oznaczają dostępne misje. M otwiera wielką mapę królestwa — kliknij ją, aby ustawić cel podróży (niebieski znacznik na minimapie).',
     },
     {
       icon: 'backpack', title: 'Ekwipunek i podróż',
       text: touch
         ? 'Przycisk plecaka — ekwipunek: broń, zbroja i amulet. W jaskini zapal pochodnię (świeczka), a konia (podkowa) kupisz w stajni — przycisk H gwizdka przywoła go do Ciebie. Gra zapisuje się sama.'
-        : 'I — ekwipunek: broń, zbroja i amulet. W jaskini zapal pochodnię (T), a konia kupisz w stajni — H dosiada i zsada z wierzchowca. Gra zapisuje się automatycznie.',
+        : 'I — ekwipunek: broń, zbroja i amulet. Kowal Grimm ulepszy Twoją broń za odłamki kryształu! W jaskini zapal pochodnię (T), a konia kupisz w stajni — H dosiada i zsiada z wierzchowca. Gra zapisuje się automatycznie.',
     },
     {
-      icon: 'skull', title: 'Zlecenia i bossowie',
-      text: 'Na rynku wisi tablica zleceń łowczego — powtarzalne łowy na wilki, dziki, gobliny i szkielety to szybki zarobek. A gdy będziesz gotowy… w górach czekają bossowie. Powodzenia, rycerzu!',
+      icon: 'fish', title: 'Wędkowanie i magia',
+      text: touch
+        ? 'Kup wędkę u Aldony, stań nad wodą i wciśnij przycisk dymku — gdy ryba bierze, wciśnij go ponownie! Złapane ryby sprzedasz kupcom. Czarownica Morwena z bagien nauczy Cię Kuli Lodu — przełączaj zaklęcia, rzucając kolejne.'
+        : 'Kup wędkę u Aldony, stań nad wodą i naciśnij E — gdy żyłka szarpnie, naciśnij E ponownie! Ryby sprzedasz kupcom, a za Złotą Rybkę dostaniesz krocie. Czarownica Morwena z Mrocznych Bagien sprzeda Ci księgę Kuli Lodu (G zmienia zaklęcie, F rzuca).',
+    },
+    {
+      icon: 'skull', title: 'Zlecenia, bossowie i chwała',
+      text: 'Na rynku wisi tablica zleceń łowczego — powtarzalne łowy na wilki, dziki, gobliny, szkielety i duchy to szybki zarobek. Po pokonaniu Mrocznego Rycerza czekają Mroczne Bagna z duchami i czarownicą. Zbieraj też osiągnięcia (trofeum)! Powodzenia, rycerzu!',
     },
   ];
 }

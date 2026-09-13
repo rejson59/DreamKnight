@@ -17,6 +17,7 @@ export class Input {
     this.canvas = null;
     this.onPause = null; this.onInventory = null; this.onQuests = null;
     this.onPotion = null; this.onSpell = null; this.onTorch = null; this.onHorse = null;
+    this.onCycleSpell = null; this.onMap = null;
     this.onAnyKey = null;
   }
 
@@ -38,6 +39,7 @@ export class Input {
       if (e.code === 'Escape') { this.onPause && this.onPause(); return; }
       if (this.uiOpen) {
         if (e.code === 'KeyI' || e.code === 'KeyJ') { this.onPause && this.onPause(); }
+        if (e.code === 'KeyM' && this.onMap) { this.onMap(); }
         return;
       }
       switch (e.code) {
@@ -45,6 +47,8 @@ export class Input {
         case 'KeyI': this.onInventory && this.onInventory(); break;
         case 'KeyJ': this.onQuests && this.onQuests(); break;
         case 'KeyF': this.onSpell && this.onSpell(); break;
+        case 'KeyG': this.onCycleSpell && this.onCycleSpell(); break;
+        case 'KeyM': this.onMap && this.onMap(); break;
         case 'KeyR': this.onPotion && this.onPotion(); break;
         case 'KeyT': this.onTorch && this.onTorch(); break;
         case 'KeyH': this.onHorse && this.onHorse(); break;

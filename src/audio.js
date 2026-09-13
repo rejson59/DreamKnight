@@ -101,6 +101,14 @@ export class AudioSys {
       case 'thunder': this.noise(1.4, 0.4, 180); this.tone(50, 1.2, 'sine', 0.35, 25, 0.1); break;
       case 'cutscene': [392, 494, 587, 784].forEach((f, i) => this.tone(f, 0.5, 'sine', 0.18, null, i * 0.22)); break;
       case 'snore': this.noise(0.5, 0.1, 300); break;
+      // --- v3: Mroczne Bagna i nowe aktywności ---
+      case 'wraith': this.tone(160, 1.1, 'sine', 0.18, 80); this.tone(240, 0.9, 'sine', 0.1, 120, 0.2); this.noise(0.8, 0.08, 600, 'lowpass', 0.15); break;
+      case 'frog': { const f = 180 + Math.random() * 90; this.tone(f, 0.09, 'square', 0.05, f * 0.7); this.tone(f * 1.1, 0.08, 'square', 0.04, f * 0.75, 0.12); break; }
+      case 'cast': this.noise(0.25, 0.2, 1800, 'bandpass'); break;
+      case 'bite': this.tone(1200, 0.06, 'square', 0.2); this.tone(900, 0.06, 'square', 0.15, null, 0.07); break;
+      case 'ice': this.tone(1400, 0.18, 'sine', 0.15, 900); this.noise(0.12, 0.12, 5200, 'highpass'); this.tone(1900, 0.12, 'sine', 0.08, 1400, 0.05); break;
+      case 'upgrade': this.tone(720, 0.1, 'square', 0.15, 500); this.tone(1080, 0.2, 'square', 0.12, 800, 0.1); this.noise(0.08, 0.2, 4000, 'highpass', 0.02); break;
+      case 'achieve': [523, 659, 784, 1046, 1318].forEach((f, i) => this.tone(f, 0.26, 'triangle', 0.2, null, i * 0.09)); break;
       default: break;
     }
   }

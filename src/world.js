@@ -49,6 +49,8 @@ function distRoad(x, z) {
   d = Math.min(d, Math.abs(x + 168) * (z > 55 && z < 165 ? 1 : 1e9));      // do jaskini
   d = Math.min(d, Math.abs(x - 190) * (z > 35 && z < 165 ? 1 : 1e9));      // do lasu
   d = Math.min(d, Math.abs(x - 140) * (z > 160 && z < 250 ? 1 : 1e9));     // do ruin
+  d = Math.min(d, Math.abs(x + 140) * (z > 158 && z < 202 ? 1 : 1e9));     // odgałęzienie na bagna
+  d = Math.min(d, Math.abs(z - 197) * (x > -166 && x < -134 ? 1 : 1e9));   // droga do chatki
   return d;
 }
 
@@ -99,6 +101,15 @@ export function groundHeight(x, z) {
   // Staw w lesie
   const dPond = dist(x, z, LOC.forestPond.x, LOC.forestPond.z);
   if (dPond < 24) h -= smoothstep(24, 8, dPond) * 2.6;
+  // Mroczne Bagna — płaska kotlina
+  const dSwamp = dist(x, z, LOC.swamp.x, LOC.swamp.z);
+  if (dSwamp < 82) {
+    const f = smoothstep(82, 46, dSwamp);
+    h = h * (1 - f * 0.8) + 0.9 * f * 0.8;
+  }
+  // Bagienne rozlewisko
+  const dSPond = dist(x, z, LOC.swampPond.x, LOC.swampPond.z);
+  if (dSPond < 34) h -= smoothstep(34, 10, dSPond) * 3.4;
   // Drogi
   const dr = distRoad(x, z);
   if (dr < 10 && sq > MOAT_OUT) {
@@ -206,6 +217,7 @@ export class World {
     this.buildCave();
     this.buildRuins();
     this.buildArena();
+    this.buildSwamp();
     this.buildPaths();
     this.buildVegetation();
     this.buildParticles();
@@ -302,6 +314,7 @@ export class World {
     this.sun.shadow.camera.top = 95; this.sun.shadow.camera.bottom = -95;
     this.sun.shadow.camera.near = 10; this.sun.shadow.camera.far = 500;
     this.sun.shadow.bias = -0.0006;
+    this.sun.shadow.normalBias = 0.05;   // eliminuje „akne” cieni na low-poly geometrii
     this.scene.add(this.sun, this.sun.target);
     this.hemi = new THREE.HemisphereLight(0xbdd7ff, 0x4a5a3a, 0.9);
     this.scene.add(this.hemi);
@@ -393,6 +406,7 @@ export class World {
     const cSnow = new THREE.Color(0xe8eef4), cSand = new THREE.Color(0xb09a68);
     const cCobble = new THREE.Color(0x7a7a84), cForest = new THREE.Color(0x2e5230);
     const cCave = new THREE.Color(0x565660), cMagic = new THREE.Color(0x2a6b6b);
+    const cMud = new THREE.Color(0x45402e), cMoss = new THREE.Color(0x3d5a30);
     const tmp = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i);
@@ -432,6 +446,12 @@ export class World {
       // Brzegi stawu
       const dP = dist(x, z, LOC.forestPond.x, LOC.forestPond.z);
       if (dP < 24) tmp.lerp(cSand, smoothstep(24, 16, dP) * 0.6);
+      // Mroczne Bagna — muł i mchy
+      const dSw = dist(x, z, LOC.swamp.x, LOC.swamp.z);
+      if (dSw < 82) {
+        tmp.lerp(cMud, smoothstep(82, 42, dSw) * 0.85);
+        if (dSw < 52) tmp.lerp(cMoss, smoothstep(52, 22, dSw) * 0.45);
+      }
       colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -1674,6 +1694,196 @@ export class World {
 
   // ---------- ŚCIEŻKI I DROGOWSKAZY ----------
   // Taśma drogi wzdłuż punktów, dopasowana do terenu
+  // ---------- MROCZNE BAGNA ----------
+  buildSwamp() {
+    const S = LOC.swamp, P = LOC.swampPond, W = LOC.witchHut;
+
+    // Mętna tafla rozlewiska (nakładka na wodzie)
+    const murk = new THREE.Mesh(
+      new THREE.CircleGeometry(19, 26),
+      new THREE.MeshBasicMaterial({ color: 0x2e4a33, transparent: true, opacity: 0.62, depthWrite: false })
+    );
+    murk.rotation.x = -Math.PI / 2;
+    murk.position.set(P.x, WATER_Y + 0.08, P.z);
+    this.scene.add(murk);
+    // sinawa poświata
+    const sheen = new THREE.Mesh(
+      new THREE.CircleGeometry(13, 22),
+      new THREE.MeshBasicMaterial({ color: 0x55aa66, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    sheen.rotation.x = -Math.PI / 2;
+    sheen.position.set(P.x, WATER_Y + 0.14, P.z);
+    this.scene.add(sheen);
+
+    // Trzciny i pałki wokół rozlewiska
+    const reedM = this.M(0x4a5a2a), cattM = this.M(0x4a3018);
+    for (let i = 0; i < 40; i++) {
+      const a = (i / 40) * Math.PI * 2 + rand(-0.06, 0.06);
+      const r = 16 + rand(-1.5, 3.5);
+      const rx = P.x + Math.cos(a) * r, rz = P.z + Math.sin(a) * r;
+      const ry = Math.max(groundHeight(rx, rz), WATER_Y - 0.2);
+      const hgt = 1 + rand(0, 1.1);
+      const reed = this.cyl(0.025, 0.04, hgt, reedM, rx, ry + hgt / 2, rz, 5);
+      this.scene.add(reed);
+      if (Math.random() < 0.4) this.scene.add(this.cyl(0.06, 0.06, 0.3, cattM, rx, ry + hgt - 0.15, rz, 6));
+      this.reeds.push({ m: reed, ph: rand(0, 9) });
+    }
+
+    // Martwe, powyginane drzewa
+    const deadM = this.M(0x3a3228, { roughness: 1 });
+    const deadSpots = [];
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + rand(-0.25, 0.25);
+      const r = 22 + rand(0, 46);
+      deadSpots.push([S.x + Math.cos(a) * r, S.z + Math.sin(a) * r * 0.92]);
+    }
+    deadSpots.push([P.x - 22, P.z + 12], [P.x + 20, P.z - 16]);
+    for (const [dxs, dzs] of deadSpots) {
+      if (dist(dxs, dzs, W.x, W.z) < 9) continue; // nie zasłaniaj chatki
+      if (dist(dxs, dzs, P.x, P.z) < 17) continue;
+      const y = groundHeight(dxs, dzs);
+      const g = new THREE.Group();
+      const h = rand(4.5, 7);
+      const trunk = this.cyl(0.16, 0.4, h, deadM, 0, h / 2, 0, 7);
+      trunk.rotation.z = rand(-0.14, 0.14);
+      g.add(trunk);
+      // krzywe konary
+      const nB = 3 + ((Math.random() * 3) | 0);
+      for (let b = 0; b < nB; b++) {
+        const ba = rand(0, Math.PI * 2), bh = rand(h * 0.45, h * 0.95);
+        const bl = rand(1.4, 2.8);
+        const br = this.cyl(0.04, 0.11, bl, deadM, 0, 0, 0, 5);
+        br.position.set(Math.cos(ba) * bl * 0.28, bh, Math.sin(ba) * bl * 0.28);
+        br.rotation.z = Math.cos(ba) * 1.05;
+        br.rotation.x = -Math.sin(ba) * 1.05;
+        g.add(br);
+        // podrzędny gałązek
+        const tw = this.cyl(0.015, 0.045, 1, deadM, br.position.x + Math.cos(ba) * 0.5, bh + 0.5, br.position.z + Math.sin(ba) * 0.5, 4);
+        tw.rotation.z = rand(-1.2, 1.2);
+        g.add(tw);
+      }
+      g.position.set(dxs, y, dzs);
+      g.rotation.y = rand(0, 6.28);
+      this.scene.add(g);
+      this.circ(dxs, dzs, 0.7);
+    }
+
+    // Świecące bagienne grzyby (zielone)
+    const glowM = new THREE.MeshStandardMaterial({ color: 0x55dd77, emissive: 0x1f9944, emissiveIntensity: 1.1, roughness: 0.5 });
+    for (let i = 0; i < 14; i++) {
+      const a = rand(0, 6.28), r = rand(18, 66);
+      const mx = S.x + Math.cos(a) * r, mz = S.z + Math.sin(a) * r * 0.9;
+      if (this.inDeepWater(mx, mz)) continue;
+      const y = groundHeight(mx, mz);
+      const s = rand(0.5, 1.1);
+      const g = new THREE.Group();
+      g.add(this.cyl(0.09 * s, 0.13 * s, 0.5 * s, this.M(0xd8ccb0), 0, 0.25 * s, 0, 7));
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.3 * s, 9, 7, 0, Math.PI * 2, 0, Math.PI / 2), glowM);
+      cap.position.y = 0.5 * s;
+      g.add(cap);
+      const gl = this.glowSprite(this.T.soft, 0x55dd77, 1.1 * s, 0.3);
+      gl.position.y = 0.5 * s;
+      g.add(gl);
+      g.position.set(mx, y, mz);
+      this.scene.add(g);
+    }
+
+    // Bagna duchy-iskry (wispy)
+    this.swampWisps = [];
+    for (let i = 0; i < 7; i++) {
+      const a = rand(0, 6.28), r = rand(12, 60);
+      const wx = S.x + Math.cos(a) * r, wz = S.z + Math.sin(a) * r * 0.9;
+      const wy = groundHeight(wx, wz) + rand(0.8, 2.2);
+      const s = this.glowSprite(this.T.soft, 0x88ffcc, rand(0.8, 1.5), 0.35);
+      s.position.set(wx, wy, wz);
+      this.scene.add(s);
+      this.swampWisps.push({ s, x: wx, y: wy, z: wz, ph: rand(0, 9), sp: rand(0.5, 1.1) });
+    }
+
+    // ---- CHATKA CZAROWNICY NA PALACH ----
+    const hy = groundHeight(W.x, W.z);
+    const hut = new THREE.Group();
+    const plankM = this.TM(this.T.woodDark, 3, 1.4);
+    const stiltsM = this.M(0x4a3826);
+    // palafiki
+    for (const [sx, sz] of [[-2.1, -1.9], [2.1, -1.9], [-2.1, 1.9], [2.1, 1.9]]) {
+      hut.add(this.cyl(0.16, 0.2, 3.1, stiltsM, sx, 1.4, sz, 7));
+    }
+    // korpus chatki
+    const floorY = 2.9;
+    hut.add(this.box(5, 0.3, 4.4, plankM, 0, floorY, 0));
+    hut.add(this.box(4.7, 3, 4.1, plankM, 0, floorY + 1.65, 0));
+    // dach — spiczasty, słoma
+    const strawM = this.M(0x6a5a2a, { roughness: 1 });
+    const roof = this.cyl(0.3, 3.6, 2.6, strawM, 0, floorY + 4.4, 0, 4);
+    roof.rotation.y = Math.PI / 4;
+    hut.add(roof);
+    // drzwi + okno z ciepłym blaskiem
+    const doorM = this.M(0x2e2014);
+    hut.add(this.box(1.1, 1.9, 0.12, doorM, 0.9, floorY + 1.05, 2.06));
+    const winM = new THREE.MeshStandardMaterial({ color: 0x201a10, emissive: 0xffaa44, emissiveIntensity: 1.2 });
+    hut.add(this.box(0.9, 0.9, 0.1, winM, -1.2, floorY + 1.7, 2.06));
+    this.windowMats.push(winM);
+    // ganek + drabina
+    hut.add(this.box(2.6, 0.22, 1.7, plankM, 0.2, floorY - 0.02, 3));
+    for (const rx of [-1.6, 2.0]) hut.add(this.cyl(0.05, 0.05, 1.7, stiltsM, rx, floorY / 2, 3.6, 5));
+    for (let i = 0; i < 4; i++) hut.add(this.box(1.2, 0.08, 0.16, stiltsM, 0.2, 0.6 + i * 0.75, 3.9));
+    // balustrada ganka
+    for (const bx of [-1.1, 1.5]) hut.add(this.cyl(0.06, 0.06, 0.9, stiltsM, bx, floorY + 0.45, 3.7, 5));
+    hut.add(this.box(2.7, 0.1, 0.12, stiltsM, 0.2, floorY + 0.9, 3.7));
+    // wiązki ziół pod okapem
+    for (let i = 0; i < 3; i++) {
+      const herb = this.cyl(0.09, 0.05, 0.7, this.M(0x5a7a3a), -1.8 + i * 0.5, floorY + 2.6, 2.05, 5);
+      herb.rotation.x = 0.25;
+      hut.add(herb);
+    }
+    hut.position.set(W.x, hy, W.z);
+    hut.rotation.y = Math.PI * 0.15;
+    this.scene.add(hut);
+    this.rect(W.x - 3, W.z - 2.8, 6, 5.6); // kolizja korpusu
+    this.rect(W.x - 2.2, W.z + 1.4, 5.2, 3.2); // ganek (można wejść po drabinie? — blokujemy, NPC stoi przed)
+
+    // Kociołek z zielonym wywarem przed chatką
+    const cx = W.x + 4.4, cz = W.z + 3.4;
+    const cy = groundHeight(cx, cz);
+    const cauldron = new THREE.Group();
+    const pot = new THREE.Mesh(new THREE.SphereGeometry(0.75, 14, 10, 0, Math.PI * 2, Math.PI * 0.24, Math.PI * 0.76), this.M(0x222226, { metalness: 0.5, roughness: 0.6 }));
+    pot.position.y = 0.85;
+    cauldron.add(pot);
+    for (const lx of [-0.4, 0.4]) {
+      const leg = this.cyl(0.06, 0.08, 0.6, this.M(0x1a1a1e), lx, 0.3, 0, 5);
+      leg.rotation.z = lx > 0 ? -0.25 : 0.25;
+      cauldron.add(leg);
+    }
+    const brew = new THREE.Mesh(new THREE.CircleGeometry(0.62, 14),
+      new THREE.MeshBasicMaterial({ color: 0x66ff88, transparent: true, opacity: 0.85 }));
+    brew.rotation.x = -Math.PI / 2;
+    brew.position.y = 1.08;
+    cauldron.add(brew);
+    cauldron.position.set(cx, cy, cz);
+    this.scene.add(cauldron);
+    this.circ(cx, cz, 1.1);
+    this.lights.witch = this.point(0x55ff99, 3.2, 16, cx, cy + 1.6, cz);
+    // parujący kociołek
+    this.emitters.push(new Emitter(this.scene, this.T.soft, 24, {
+      size: 0.9, color: 0x66ff99, opacity: 0.35, gravity: -0.4, drag: 0.5,
+      spawner: (e, i) => {
+        const j = i * 3;
+        e.pos[j] = cx + rand(-0.3, 0.3); e.pos[j + 1] = cy + 1.2; e.pos[j + 2] = cz + rand(-0.3, 0.3);
+        e.vel[j] = rand(-0.15, 0.15); e.vel[j + 1] = rand(0.5, 1.1); e.vel[j + 2] = rand(-0.15, 0.15);
+        e.maxLife[i] = e.life[i] = rand(1, 2.2);
+      },
+    }));
+
+    // Skrzynia na bagnie (suchy pagórek)
+    const chx = S.x + 18, chz = S.z - 30;
+    this.swampChestPos = { x: chx, z: chz };
+    this.addChest(chx, groundHeight(chx, chz), chz, 0.6);
+
+    // Latarnia przy drabinie
+    this.addTorch(W.x - 1.9, hy + 2.2, W.z + 3.9, true, 0xffd9a0, 0xffa044);
+  }
+
   buildPath(points, width, tex) {
     const pts = [];
     for (let i = 0; i < points.length - 1; i++) {
@@ -1739,6 +1949,7 @@ export class World {
     this.buildPath([[58, 188], [100, 192], [140, 196], [140, 238]], 3, dirt);
     this.buildPath([[190, 140], [150, 80], [140, 0], [120, -70], [95, -140], [60, -185], [42, -203]], 3, dirt);
     this.buildPath([[40, -205], [30, -226], [20, -244]], 2.2, dirt);
+    this.buildPath([[-140, 160], [-140, 197], [-162, 199]], 2.6, dirt);   // na bagna
     // --- drogowskazy: [x, z, [[tekst, dx, dz], ...]] ---
     const signs = [
       [4, 92, [['ZAMEK', 0, -1], ['ROZSTAJE', 0, 1]]],
@@ -1753,6 +1964,8 @@ export class World {
       [-168, 70, [['MROCZNA JASKINIA', 0, -1]]],
       [52, -198, [['SZCZYT ZGUBY', -0.5, -1]]],
       [95, -136, [['OBÓZ GOBLINÓW', -0.4, -1], ['LAS', 0.4, 1]]],
+      [-134, 164, [['MROCZNE BAGNA', -0.2, 1], ['JASKINIA', -1, -0.15]]],
+      [-152, 198, [['CHATKA MORWENY', -1, 0.2], ['BAGNA', 0.1, 1]]],
     ];
     for (const [sx, sz, boards] of signs) this.buildSignpost(sx, sz, boards);
   }
@@ -1798,6 +2011,10 @@ export class World {
     if (dist(x, z, LOC.farm.x, LOC.farm.z) < 36) return false;
     if (dist(x, z, LOC.windmill.x, LOC.windmill.z) < 14) return false;
     if (dist(x, z, LOC.stoneCircle.x, LOC.stoneCircle.z) < 12) return false;
+    // Mroczne Bagna — drzewa tylko martwe (buduje buildSwamp), ziele osobno
+    if (forTree && dist(x, z, LOC.swamp.x, LOC.swamp.z) < 76) return false;
+    if (dist(x, z, LOC.swampPond.x, LOC.swampPond.z) < 20) return false;
+    if (dist(x, z, LOC.witchHut.x, LOC.witchHut.z) < 8) return false;
     const h = groundHeight(x, z);
     if (h < WATER_Y + 0.5) return false;
     return true;
@@ -2259,6 +2476,14 @@ export class World {
       const a = rand(0, 6.28), r = rand(5, 20);
       this.addPickup('crystal_shard', LOC.caveCenter.x + Math.cos(a) * r, 1.5, LOC.caveCenter.z + Math.sin(a) * r);
     }
+    // Bagienne ziele na bagnach
+    for (let i = 0; i < 14; i++) {
+      const a = rand(0, 6.28), r = rand(20, 70);
+      const x = LOC.swamp.x + Math.cos(a) * r, z = LOC.swamp.z + Math.sin(a) * r * 0.9;
+      if (this.inDeepWater(x, z) || dist(x, z, LOC.witchHut.x, LOC.witchHut.z) < 6) continue;
+      if (groundHeight(x, z) < WATER_Y + 0.25) continue; // tylko na suchym
+      this.addPickup('swamp_herb', x, groundHeight(x, z), z);
+    }
   }
 
   addPickup(kind, x, y, z) {
@@ -2283,6 +2508,23 @@ export class World {
         new THREE.MeshStandardMaterial({ color: 0xffdd44, emissive: 0xaa7700, emissiveIntensity: 0.7 }));
       fl.position.y = 0.65;
       mesh.add(fl);
+    } else if (kind === 'swamp_herb') {
+      // bagienne ziele — skręcone pędy z chorej zieleni
+      mesh = new THREE.Group();
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + 0.4;
+        const stalk = this.cyl(0.03, 0.05, 0.8, this.M(0x4a6b3a), Math.cos(a) * 0.1, 0.4, Math.sin(a) * 0.1, 5);
+        stalk.rotation.z = Math.cos(a) * 0.45;
+        stalk.rotation.x = -Math.sin(a) * 0.45;
+        mesh.add(stalk);
+        const bud = new THREE.Mesh(new THREE.SphereGeometry(0.09, 7, 6),
+          new THREE.MeshStandardMaterial({ color: 0x88ee66, emissive: 0x2f9933, emissiveIntensity: 1.2 }));
+        bud.position.set(Math.cos(a) * 0.32, 0.78, Math.sin(a) * 0.32);
+        mesh.add(bud);
+      }
+      const glow = this.glowSprite(this.T.soft, 0x66dd55, 1.5, 0.35);
+      glow.position.y = 0.45;
+      mesh.add(glow);
     } else {
       mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.35),
         new THREE.MeshStandardMaterial({ color: 0x77ddff, emissive: 0x2299dd, emissiveIntensity: 1.3, roughness: 0.2 }));
@@ -2321,6 +2563,7 @@ export class World {
       return !onBridge;
     }
     if (dist(x, z, LOC.forestPond.x, LOC.forestPond.z) < 14.5) return true;
+    if (dist(x, z, LOC.swampPond.x, LOC.swampPond.z) < 16.5) return true;
     return false;
   }
 
@@ -2352,6 +2595,7 @@ export class World {
     if (dist(x, z, LOC.caveCenter.x, LOC.caveCenter.z) < 34) return 'cave';
     if (dist(x, z, LOC.arena.x, LOC.arena.z) < 32) return 'arena';
     if (dist(x, z, LOC.ruins.x, LOC.ruins.z) < 32) return 'ruins';
+    if (dist(x, z, LOC.swamp.x, LOC.swamp.z) < 78) return 'swamp';
     if (z < -125) return 'mountains';
     if (dist(x, z, LOC.forest.x, LOC.forest.z) < 100) return 'forest';
     if (sqDist(x, z) < MOAT_IN) {
@@ -2418,6 +2662,7 @@ export class World {
     if (this.sun) this.setShadow(q.extent, q.shadow);
     this.clouds.forEach((c, i) => { c.s.visible = i < q.clouds; });
     if (this.lights.wizard) this.lights.wizard.visible = name !== 'low';
+    if (this.lights.witch) this.lights.witch.visible = name !== 'low';
     if (this.lights.fountain) this.lights.fountain.visible = name !== 'low';
     if (this.lights.cave2) this.lights.cave2.visible = name === 'high' || name === 'ultra';
     if (this.lights.ruins) this.lights.ruins.visible = name !== 'low';
@@ -2914,6 +3159,16 @@ export class World {
     for (const e of this.emitters) e.update(dt);
     if (this.fireflies) this.fireflies.mat.opacity = 0.35 + this.nightF * 0.6;
 
+    // Bagna: dryfujące duchy-iskry
+    if (this.swampWisps) {
+      for (const w of this.swampWisps) {
+        w.ph += dt * w.sp;
+        w.s.position.y = w.y + Math.sin(w.ph) * 0.45;
+        w.s.position.x = w.x + Math.sin(w.ph * 0.33) * 1.6;
+        w.s.position.z = w.z + Math.cos(w.ph * 0.27) * 1.6;
+        w.s.material.opacity = 0.18 + (0.5 + Math.sin(w.ph * 1.7) * 0.5) * 0.22;
+      }
+    }
     // Pickupy — animacja i respawn
     for (const p of this.pickups) {
       if (p.taken) {

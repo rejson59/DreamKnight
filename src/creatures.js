@@ -1,6 +1,6 @@
 // Zwierzęta (przyjazne) i wrogowie (AI, walka) + koń gracza.
 import * as THREE from 'three';
-import { createQuadruped, createGoblin, createGolem, createSkeleton, createHumanoid } from './rig.js';
+import { createQuadruped, createGoblin, createGolem, createSkeleton, createHumanoid, createWraith } from './rig.js';
 import { LOC } from './config.js';
 
 const _tmpQ = new THREE.Quaternion();
@@ -84,11 +84,14 @@ export class CreatureManager {
         glowingEyes: true, scale: 1.32,
       });
       cfg = { hp: 650, dmg: 26, speed: 3.4, aggro: 34, xp: 350, loot: [['gold', 300], ['potion_b', 2]], boss: true, bossName: 'Mroczny Rycerz' };
+    } else if (kind === 'wraith') {
+      rig = createWraith();
+      cfg = { hp: 60, dmg: 13, speed: 3.1, aggro: 15, xp: 42, loot: [['wisp_essence', 1], ['gold', 16]] };
     }
     rig.group.position.set(x, this.y(x, z), z);
     this.scene.add(rig.group);
     const bar = hpBar();
-    bar.position.y = kind === 'golem' ? 4.4 : kind === 'darkknight' ? 3.2 : kind === 'wolf' || kind === 'boar' ? 1.7 : 1.9;
+    bar.position.y = kind === 'golem' ? 4.4 : kind === 'darkknight' ? 3.2 : kind === 'wraith' ? 2.6 : kind === 'wolf' || kind === 'boar' ? 1.7 : 1.9;
     if (kind === 'darkknight') bar.scale.setScalar(1.4);
     bar.visible = false;
     rig.group.add(bar);
@@ -98,7 +101,7 @@ export class CreatureManager {
       dmg: cfg.dmg, speed: cfg.speed, aggro: cfg.aggro, xp: cfg.xp, loot: cfg.loot,
       home: { x, z }, leash: opts.leash ?? 40,
       state: 'idle', target: null, waitT: Math.random() * 3,
-      atkT: 0, atkCd: 0, hitT: 0, dead: false, deadT: 0,
+      atkT: 0, atkCd: 0, hitT: 0, slowT: 0, dead: false, deadT: 0,
       respawnT: 0, respawns: !cfg.boss && opts.respawns !== false,
       boss: !!cfg.boss, bossName: cfg.bossName || null,
       specialCd: 4, summonCd: 10, chargeDir: null, chargeT: 0, minions: 0,
@@ -146,6 +149,18 @@ export class CreatureManager {
     this.addEnemy('golem', LOC.caveCenter.x - 6, LOC.caveCenter.z, { leash: 30, respawns: false });
     // Mroczny Rycerz — arena
     this.addEnemy('darkknight', LOC.arena.x, LOC.arena.z - 6, { leash: 26, respawns: false });
+    // Duchy Bagien — krążą wokół rozlewiska
+    const wraithSpots = [
+      [LOC.swampPond.x + 24, LOC.swampPond.z - 14], [LOC.swampPond.x - 22, LOC.swampPond.z + 18],
+      [LOC.swampPond.x + 6, LOC.swampPond.z + 26], [LOC.swampPond.x - 26, LOC.swampPond.z - 6],
+      [LOC.swampPond.x + 30, LOC.swampPond.z + 8], [LOC.swamp.x + 30, LOC.swamp.z + 34],
+    ];
+    for (const [x, z] of wraithSpots) this.addEnemy('wraith', x, z, { leash: 26 });
+    // Żaby — bagienne kałuże
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * 6.28, r = 22 + Math.random() * 38;
+      this.addAnimal('frog', LOC.swamp.x + Math.cos(a) * r, LOC.swamp.z + Math.sin(a) * r * 0.9, { range: 9, speed: 2.2 });
+    }
     // Konie w stajni (ozdobne)
     if (this.world.paddock) {
       const p = this.world.paddock;
@@ -230,6 +245,12 @@ export class CreatureManager {
     }
     game.ui.toast(`Pokonano: ${this.enemyName(e.kind)}! +${e.xp} PD`);
     game.quests.onKill(e.kind);
+    if (e.kind === 'wraith') {
+      // duch rozpływa się w zieloną mgiełkę
+      game.fx.burst(ep.x, ep.y + 1.4, ep.z, 0x77ffbb, 26, 3.5, 1.1);
+      game.fx.ring(ep.x, ep.y + 0.3, ep.z, 0x55ddaa, 4);
+    }
+    game.achv?.onEnemyKilled(e);
     if (e.kind === 'golem') {
       game.ui.hideBoss();
       game.ui.toast('Golem pokonany! Otwórz skrzynię w głębi jaskini!', 'quest');
@@ -268,7 +289,7 @@ export class CreatureManager {
   }
 
   enemyName(kind) {
-    return { goblin: 'Goblin', wolf: 'Wilk', golem: 'Kamienny Golem', boar: 'Dzik', skeleton: 'Szkielet', darkknight: 'Mroczny Rycerz' }[kind] || kind;
+    return { goblin: 'Goblin', wolf: 'Wilk', golem: 'Kamienny Golem', boar: 'Dzik', skeleton: 'Szkielet', darkknight: 'Mroczny Rycerz', wraith: 'Duch Bagna' }[kind] || kind;
   }
   itemName(id) {
     const names = { venison: 'dzikie mięso', wolf_pelt: 'skóra wilka', goblin_ear: 'ucho goblina', royal_crystal: 'Kryształ Królewski', crystal_shard: 'odłamek kryształu', herb_moon: 'księżycowe ziele', herb_sun: 'słoneczne ziele' };
@@ -296,13 +317,17 @@ export class CreatureManager {
     return hitAny;
   }
 
-  projectileHit(x, y, z, dmg, game) {
+  projectileHit(x, y, z, dmg, game, kind = null) {
     for (const e of this.enemies) {
       if (e.dead) continue;
       const p = e.rig.group.position;
       const r = e.boss ? 2.4 : 1.1;
       if (Math.hypot(p.x - x, p.z - z) < r && y < p.y + (e.boss ? 4.5 : 2.2)) {
         this.damageEnemy(e, dmg, (x - game.player.group.position.x), (z - game.player.group.position.z), game);
+        if (kind === 'icebolt') {
+          e.slowT = 3.2; // lodowy czar spowalnia
+          game.fx.burst(p.x, p.y + 1.2, p.z, 0xaee8ff, 12, 2.5, 0.6);
+        }
         return true;
       }
     }
@@ -333,6 +358,7 @@ export class CreatureManager {
     const dx = tx - g.position.x, dz = tz - g.position.z;
     const d = Math.hypot(dx, dz);
     if (d < 0.05) return 0;
+    if (e.slowT > 0) sp *= 0.45; // kula lodu
     g.rotation.y = Math.atan2(dx, dz);
     const p = { x: g.position.x, z: g.position.z };
     this.world.tryMove(p, (dx / d) * sp * dt, (dz / d) * sp * dt, 0.5, g.position.y);
@@ -390,6 +416,11 @@ export class CreatureManager {
         continue;
       }
       if (e.hitT > 0) e.hitT -= dt;
+      if (e.slowT > 0) {
+        e.slowT -= dt;
+        if (Math.random() < dt * 8)
+          game.fx.burst(g.position.x, g.position.y + 1, g.position.z, 0x88ddff, 2, 1, 0.5);
+      }
       const dx = px - g.position.x, dz = pz - g.position.z;
       const d = Math.hypot(dx, dz);
       const homeD = Math.hypot(g.position.x - e.home.x, g.position.z - e.home.z);
@@ -409,6 +440,7 @@ export class CreatureManager {
           if (e.kind === 'wolf') game.audio.play('wolf');
           if (e.kind === 'goblin') game.audio.play('goblin');
           if (e.kind === 'skeleton') game.audio.play('skeleton');
+          if (e.kind === 'wraith') game.audio.play('wraith');
           if (e.boss) { game.audio.play('roar'); game.shake(0.4); }
         }
       } else if (homeD > e.leash) {
@@ -585,7 +617,7 @@ export class CreatureManager {
       }
       const dx = g.position.x - px, dz = g.position.z - pz;
       const d = Math.hypot(dx, dz);
-      if (!a.isLost && (a.type === 'deer' || a.type === 'rabbit') && d < (a.type === 'rabbit' ? 5 : 7)) {
+      if (!a.isLost && (a.type === 'deer' || a.type === 'rabbit' || a.type === 'frog') && d < (a.type === 'rabbit' || a.type === 'frog' ? 5 : 7)) {
         a.target = { x: g.position.x + (dx / (d || 1)) * 25, z: g.position.z + (dz / (d || 1)) * 25, flee: true };
       }
       let moving = false;
@@ -618,7 +650,7 @@ export class CreatureManager {
       if (moving) {
         const fleeing = a.target?.flee;
         a.rig.walkPhase += dt * (fleeing ? 11 : 6);
-        if (fleeing && (a.type === 'rabbit' || a.type === 'deer')) a.rig.setBound(a.rig.walkPhase);
+        if (fleeing && (a.type === 'rabbit' || a.type === 'deer' || a.type === 'frog')) a.rig.setBound(a.rig.walkPhase);
         else if (fleeing) a.rig.setGallop(a.rig.walkPhase);
         else a.rig.setWalk(a.rig.walkPhase, 0.5);
       }

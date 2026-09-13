@@ -56,6 +56,13 @@ export const QUESTS = {
     reward: { gold: 400, xp: 350, items: ['sword_knight'] },
     requires: ['q7_ruins'],
   },
+  q9_swamp: {
+    name: 'Duchy z bagien', type: 'main', giver: 'king',
+    desc: 'Po upadku Mrocznego Rycerza jego moc uciekła na Mroczne Bagna (na południowym zachodzie) i przybrała postać Duchów Bagien. Pokonaj 4 duchy, a potem zapytaj czarownicę Morwenę o rytuał oczyszczenia.',
+    objective: { kind: 'kill', target: 'wraith', count: 4, turnIn: 'morwena', label: 'Rozprosz Duchy Bagien' },
+    reward: { gold: 500, xp: 420, items: ['amulet_swamp'] },
+    requires: ['q8_darkknight'],
+  },
   // ---- POBOCZNE ----
   s1_meat: {
     name: 'Dziczyzna dla karczmy', type: 'side', giver: 'innkeeper',
@@ -98,6 +105,20 @@ export const QUESTS = {
     objective: { kind: 'talk', target: 'merchant_aldona', label: 'Doręcz list Aldonie' },
     reward: { gold: 60, xp: 40, items: ['bread', 'bread'] },
     requires: ['q1_audience'],
+  },
+  s7_herbs: {
+    name: 'Zioła czarownicy', type: 'side', giver: 'morwena',
+    desc: 'Morwena szykuje wielki wywar i potrzebuje 5 bagiennych ziół. Rosną na bagnie wokół rozlewiska — uważaj na duchy!',
+    objective: { kind: 'collect', target: 'swamp_herb', count: 5, turnIn: 'morwena', label: 'Zbierz bagienne ziele' },
+    reward: { gold: 160, xp: 120, items: ['potion_xl', 'potion_xl'] },
+    requires: [],
+  },
+  s8_fishing: {
+    name: 'Spokojne wędkowanie', type: 'side', giver: 'miller',
+    desc: 'Młynarz Piotr marzy o świeżej rybie na obiad. Kup wędkę u Aldony, stań nad wodą (fosa, staw w lesie albo bagno) i złów 3 ryby. Naciśnij E, gdy ryba bierze!',
+    objective: { kind: 'special', target: 'fish_caught', count: 3, turnIn: 'miller', label: 'Złów ryby' },
+    reward: { gold: 150, xp: 100, items: ['meal', 'meal', 'bread'] },
+    requires: [],
   },
 };
 
@@ -214,9 +235,15 @@ export class QuestManager {
       const s = this.state[id];
       const o = q.objective;
       if (s.status === 'active' && o.kind === 'special' && o.target === flag) {
-        s.count = 1; s.status = 'turnin';
-        this.game.audio.play('questDone');
-        this.game.ui.toast(`Zadanie „${q.name}” — wróć do ${this.game.npcs.nameOf(o.turnIn)}!`, 'quest');
+        const need = o.count || 1;
+        s.count = Math.min(need, s.count + 1);
+        if (s.count >= need) {
+          s.status = 'turnin';
+          this.game.audio.play('questDone');
+          this.game.ui.toast(`Zadanie „${q.name}” — wróć do ${this.game.npcs.nameOf(o.turnIn)}!`, 'quest');
+        } else {
+          this.game.ui.toast(`${q.name}: ${s.count}/${need}`);
+        }
         this.game.ui.refreshQuestMarkers();
       }
     }
@@ -247,6 +274,7 @@ export class QuestManager {
     this.game.audio.play('win');
     this.game.ui.toast(`Ukończono: ${q.name}! +${q.reward.gold} zł`, 'quest');
     this.refresh();
+    this.game.achv?.onQuestDone(id);
     if (id === 'q6_finale') this.game.onFinale();
     if (id === 'q8_darkknight') this.game.onFinale(true);
     this.game.save();
@@ -262,6 +290,7 @@ export class QuestManager {
     this.state[id].status = 'done';
     this.game.audio.play('win');
     this.game.ui.toast(`Ukończono: ${q.name}! +${q.reward.gold} zł`, 'quest');
+    this.game.achv?.onQuestDone(id);
     this.game.save();
   }
 

@@ -18,24 +18,34 @@ export const ITEMS = {
   amulet_forest: { name: 'Amulet Lasu', icon: 'herb', type: 'amulet', price: 200, desc: 'Regeneruje 1 HP / 2 s.', stats: { regen: 0.5 } },
   amulet_stone:  { name: 'Kamienny amulet', icon: 'shield', type: 'amulet', price: 200, desc: 'Obrona +5.', stats: { def: 5 } },
   amulet_wind:   { name: 'Amulet Wiatru', icon: 'wind', type: 'amulet', price: 260, desc: 'Szybkość ruchu +20%.', stats: { speed: 0.2 } },
+  amulet_swamp:  { name: 'Amulet Bagien', icon: 'herb', type: 'amulet', price: 400, desc: 'Dar Morweny. Obrona +4, regeneracja 1 HP/s.', stats: { def: 4, regen: 1 } },
   // --- NARZĘDZIA / PRZYDATNE ---
   torch:      { name: 'Pochodnia', icon: 'torch', type: 'tool', price: 25, desc: 'Niezbędna w jaskini. Klawisz T, aby zapalić.', unique: true },
   map:        { name: 'Mapa królestwa', icon: 'map', type: 'tool', price: 60, desc: 'Odkrywa wszystkie oznaczenia na minimapie.', unique: true },
   rope:       { name: 'Lina', icon: 'rope', type: 'material', price: 12, desc: 'Mocna konopna lina. Może się przydać.' },
   lockpick:   { name: 'Wytrych', icon: 'key', type: 'material', price: 40, desc: 'Otwiera zamki… dyskretnie.' },
+  fishing_rod:{ name: 'Wędka', icon: 'rod', type: 'tool', price: 90, desc: 'Stań nad wodą i naciśnij E, aby zarzucić. Kto złowi złotą rybkę?', unique: true },
   // --- JEDZENIE / MIKSTURY ---
   meal:       { name: 'Prowiant', icon: 'food', type: 'consumable', price: 15, desc: 'Sycący posiłek. +40 HP.', heal: 40, use: 'eat' },
   bread:      { name: 'Chleb', icon: 'bread', type: 'consumable', price: 6, desc: 'Świeży bochenek. +15 HP.', heal: 15, use: 'eat' },
   potion_s:   { name: 'Mała mikstura', icon: 'potion', type: 'consumable', price: 30, desc: 'Leczy 50 HP.', heal: 50, use: 'potion' },
   potion_b:   { name: 'Duża mikstura', icon: 'potion', type: 'consumable', price: 80, desc: 'Leczy 120 HP.', heal: 120, use: 'potion' },
+  potion_xl:  { name: 'Eliksir Morweny', icon: 'potion', type: 'consumable', price: 150, desc: 'Babiński eliksir. Leczy 250 HP.', heal: 250, use: 'potion' },
+  fish_small: { name: 'Płotka', icon: 'fish', type: 'consumable', price: 8, desc: 'Mała rybka. +20 HP (albo sprzedaj).', heal: 20, use: 'eat' },
+  fish_big:   { name: 'Sandacz', icon: 'fish', type: 'consumable', price: 25, desc: 'Tłusta ryba z tutejszych wód. +55 HP.', heal: 55, use: 'eat' },
+  fish_gold:  { name: 'Złota rybka', icon: 'fish', type: 'material', price: 250, desc: 'Legendarna rybka. Kupcy słono za nią płacą.' },
+  old_boot:   { name: 'Stary but', icon: 'boot', type: 'material', price: 2, desc: 'Czyjś zgubiony but. Pachnie bagnem.' },
   venison:    { name: 'Dzikie mięso', icon: 'meat', type: 'material', price: 10, desc: 'Z upolowanych jeleni. Karczmarz je odkupi.' },
   wolf_pelt:  { name: 'Skóra wilka', icon: 'hide', type: 'material', price: 18, desc: 'Cenna u kupców.' },
   goblin_ear: { name: 'Ucho goblina', icon: 'ear', type: 'material', price: 8, desc: 'Dowód zwycięstwa. Król je skupuje.' },
+  swamp_herb: { name: 'Bagienne ziele', icon: 'herb', type: 'material', price: 18, desc: 'Pachnące mułem ziele z Mrocznych Bagien. Czarownica je potrzebuje.' },
+  wisp_essence:{ name: 'Esencja ducha', icon: 'ghost', type: 'material', price: 60, desc: 'Zimna poświata pozostała po Duchu Bagna.' },
   // --- MAGIA ---
   herb_moon:   { name: 'Księżycowe ziele', icon: 'herb', type: 'material', price: 20, desc: 'Magiczne ziele z lasu. Czarodziej go potrzebuje.' },
   herb_sun:    { name: 'Słonecznikowe ziele', icon: 'flower', type: 'material', price: 14, desc: 'Składnik mikstur.' },
   spell_fire:  { name: 'Księga: Kula Ognia', icon: 'book', type: 'spell', price: 300, desc: 'Uczy zaklęcia. Klawisz F miota ogniem.', spell: 'fireball', unique: true },
   spell_heal:  { name: 'Księga: Leczenie', icon: 'book', type: 'spell', price: 350, desc: 'Uczy zaklęcia leczenia ran.', spell: 'heal', unique: true },
+  spell_ice:   { name: 'Księga: Kula Lodu', icon: 'book', type: 'spell', price: 400, desc: 'Uczy zaklęcia lodu — spowalnia wrogów.', spell: 'ice', unique: true },
   crystal_shard: { name: 'Odłamek kryształu', icon: 'crystal', type: 'material', price: 45, desc: 'Magiczny odłamek z jaskini.' },
   royal_crystal: { name: 'Kryształ Królewski', icon: 'crown', type: 'quest', price: 0, desc: 'Relikwia korony. Zanieś ją królowi!', unique: true },
 };
@@ -43,11 +53,13 @@ export const ITEMS = {
 export const SHOPS = {
   merchant_aldona: {
     name: 'Stragan Aldony', desc: '„Mapy, pochodnie, liny — wszystko dla podróżnika!”',
-    items: ['map', 'torch', 'rope', 'lockpick', 'bread', 'herb_sun'],
+    items: ['map', 'torch', 'rope', 'lockpick', 'bread', 'herb_sun', 'fishing_rod'],
+    sells: ['wolf_pelt', 'venison', 'herb_sun', 'fish_small', 'fish_big', 'fish_gold', 'old_boot'],
   },
   merchant_boran: {
     name: 'Stragan Borana', desc: '„Mikstury i prowiant na drogę!”',
     items: ['potion_s', 'potion_b', 'meal', 'bread', 'torch'],
+    sells: ['wolf_pelt', 'venison', 'fish_small', 'fish_big', 'fish_gold', 'old_boot'],
   },
   forge: {
     name: 'Kuźnia Grimma', desc: '„Broń i zbroje kute w ogniu. Najlepsze w królestwie!”',
@@ -56,10 +68,17 @@ export const SHOPS = {
   wizard: {
     name: 'Wieża Czarodzieja', desc: '„Mikstury, amulety i zaklęcia dla godnych.”',
     items: ['potion_b', 'amulet_fire', 'amulet_forest', 'amulet_stone', 'amulet_wind', 'staff_apprentice', 'spell_fire', 'spell_heal'],
+    sells: ['wisp_essence', 'swamp_herb'],
+  },
+  witch: {
+    name: 'Chatka Morweny', desc: '„Zioła, eliksiry i sekrety… wejdź, jeśli się nie boisz.”',
+    items: ['potion_xl', 'potion_b', 'potion_s', 'spell_ice', 'torch'],
+    sells: ['swamp_herb', 'wisp_essence', 'fish_gold'],
   },
   tavern: {
     name: 'Karczma „Złoty Kufel”', desc: '„Zjedz, odpocznij, zregeneruj siły!”',
     items: ['meal', 'bread', 'potion_s'],
+    sells: ['fish_small', 'fish_big', 'venison'],
   },
   stable: {
     name: 'Stajnia', desc: '„Wierzchowiec dla rycerza? Tylko najlepsze konie!”',

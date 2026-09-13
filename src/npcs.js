@@ -90,6 +90,12 @@ export const NPC_DEFS = [
     rig: { skin: 0xd9a066, shirt: 0xb0a890, pants: 0x4a4a55, hair: 0x888888 },
     static: true,
   },
+  {
+    id: 'morwena', name: 'Morwena', title: 'Czarownica z Bagien',
+    x: -160.5, z: 199.5, rotY: Math.PI * 0.85,
+    rig: { skin: 0xcfc0b2, shirt: 0x3a2a4a, pants: 0x2a2030, female: true, hair: 0xd8d8d8, robe: 0x3a2a4a, hood: 0x2a2038, staff: true, eyeColor: 0x3fae6a },
+    static: true,
+  },
 ];
 
 export class NPCManager {
@@ -259,6 +265,8 @@ export function getDialogue(npcId, game) {
         opts.push(questOpt('q7_ruins', 'W Zapomnianych Ruinach na południowym wschodzie powstały szkielety. Zniszcz 5 plugastw i wróć z meldunkiem. Weź ze sobą odwagę — i stal!'));
       if (st('q8_darkknight') === 'available')
         opts.push(questOpt('q8_darkknight', 'Mroczny Rycerz włada szkieletami ze Szczytu Zguby, najwyższej góry. Wejdź tam, pokonaj go i zakończ tę sagę raz na zawsze. Całe królestwo wierzy w Ciebie!'));
+      if (st('q9_swamp') === 'available')
+        opts.push(questOpt('q9_swamp', 'Tajemnica, rycerzu… Moc Mrocznego Rycerza nie zniknęła — uciekła na Mroczne Bagna na południowym zachodzie i przybrała postać Duchów Bagien. Rozprosz 4 duchy, a potem zapytaj czarownicę Morwenę o rytuał oczyszczenia. Tylko ona zna te sekrety.'));
       if (st('q6_finale') === 'active') {
         return D('Rycerzu! Dzięki Tobie królestwo znów zaznało pokoju. Przyjmij tytuł BOHATERA KORONY oraz tę nagrodę. Twoje imię wyryjemy w złocie!', [
           { label: '„Służę koronie!” (zakończ)', cls: 'gold-opt', fn: () => { Q.complete('q6_finale'); game.ui.closeDialogue(); } },
@@ -313,6 +321,10 @@ export function getDialogue(npcId, game) {
         opts.push(questOpt('s3_steel', 'Chcę wykuć ostrze z kryształowej stali! Przynieś mi 4 odłamki kryształu z jaskini, a sowicie Cię wynagrodzę.'));
       if (Q.canTurnIn('s3_steel', 'blacksmith'))
         opts.push(turnInOpt('s3_steel', 'Piękne odłamki! Z tego powstanie legenda. Trzymaj żelazny miecz — świeżo wykuty, jeszcze ciepły!'));
+      opts.push({
+        label: 'Ulepsz moją broń (odłamek kryształu + złoto)',
+        fn: () => game.player.upgradeWeapon(game),
+      });
       opts.push(tradeOpt('forge'));
       opts.push(byeOpt());
       return D('Grimm do usług! Miecze, kusze, zbroje — wszystko kute w ogniu i gniewie. Co podać?', opts);
@@ -410,10 +422,37 @@ export function getDialogue(npcId, game) {
       const opts = [];
       if (st('s6_letter') === 'available')
         opts.push(questOpt('s6_letter', 'Oto list… doręcz go Aldonie na rynku. I ani słowa nikomu, co w nim jest! To sprawa serca, rozumiesz…'));
+      if (st('s8_fishing') === 'available')
+        opts.push(questOpt('s8_fishing', 'Marzy mi się świeża ryba na obiad, ale woda mi nie służy… Kup wędkę u Aldony, stań nad wodą i złów 3 ryby. Naciśnij E, gdy żyłka szarpnie!'));
+      if (Q.canTurnIn('s8_fishing', 'miller'))
+        opts.push(turnInOpt('s8_fishing', 'Och, te zapachy! Moja Piotrowa dusza śpiewa. Bierz zapłatę i przysmak — a wracaj częściej, woda nie wyschnie!'));
       opts.push(byeOpt());
       return D(st('s6_letter') === 'active'
         ? 'List musi trafić do Aldony! Nie czytaj go… no, może zerknij. Tylko jej nie mów!'
         : 'Młyn miele, wiatr wieje… Życie płynie. Gdybyś szedł do lasu, uważaj na wilki — ostatnio wyły całą noc.', opts);
+    }
+    case 'morwena': {
+      const opts = [];
+      if (Q.canTurnIn('q9_swamp', 'morwena')) {
+        opts.push({
+          label: 'Rytuał oczyszczenia — odbierz nagrodę', cls: 'gold-opt',
+          fn: () => {
+            Q.turnIn('q9_swamp');
+            game.fx.ring(game.player.group.position.x, game.player.group.position.y + 0.3, game.player.group.position.z, 0x66ffaa, 6);
+            game.ui.showDialogue('Morwena', 'Chhh… duchy odpoczęły. Bagna oddychają czystym mułem. Weź ten Amulet Bagien — od dziś ziemia niczyja nie skrzywdzi takiego śmiałka. I wracaj po eliksiry, kiedy kociołek znów zabulgocze!', [byeOpt()]);
+          },
+        });
+      }
+      if (st('s7_herbs') === 'available')
+        opts.push(questOpt('s7_herbs', 'Kociołek chce jeść, a moich ziół brak. Zbierz mi 5 bagiennych ziół — rosną wokół rozlewiska, świecą jak robaczki świętojańskie. Duchy mogą pomruczeć… nie słuchaj ich.'));
+      if (Q.canTurnIn('s7_herbs', 'morwena'))
+        opts.push(turnInOpt('s7_herbs', 'Mmm, pachną strachem i rosą! Weź eliksiry — podwójnej mocy, mlask. I nie pytaj, co w nich pływa.'));
+      opts.push(tradeOpt('witch'));
+      opts.push(byeOpt());
+      const intro = st('q9_swamp') === 'active';
+      return D(intro
+        ? 'Czuję na Tobie mróz tamtych duchów, śmiertelniku… Rozprosz 4 Duchy Bagien, a moje rytuały domkną księgę Mrocznego Rycerza raz na zawsze.'
+        : 'Witaj, witaj… Kociołek bulgocze, żaby skrzeczą, a Ty jesteś pierwszy od stu księżyców. Eliksiry? Zaklęcia? Czy tylko pogadać przyszedłeś?', opts);
     }
     default:
       return D('Witaj, podróżniku.', [byeOpt()]);
