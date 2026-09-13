@@ -314,6 +314,7 @@ export class World {
     this.sun.shadow.camera.top = 95; this.sun.shadow.camera.bottom = -95;
     this.sun.shadow.camera.near = 10; this.sun.shadow.camera.far = 500;
     this.sun.shadow.bias = -0.0006;
+    this.sun.shadow.normalBias = 0.05;   // eliminuje „akne” cieni na low-poly geometrii
     this.scene.add(this.sun, this.sun.target);
     this.hemi = new THREE.HemisphereLight(0xbdd7ff, 0x4a5a3a, 0.9);
     this.scene.add(this.hemi);

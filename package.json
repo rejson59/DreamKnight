@@ -1,6 +1,6 @@
 {
   "name": "dream-knight",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Dream Knight - ultra realistyczna gra RPG fantasy z otwartym światem (Three.js)",
   "type": "module",
   "scripts": {

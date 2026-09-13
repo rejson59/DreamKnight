@@ -13,6 +13,7 @@ import { FXSystem } from './fx.js';
 import { makeTextures } from './textures.js';
 import { Fishing } from './fishing.js';
 import { Achievements } from './achievements.js';
+import { RenderPipeline } from './postfx.js';
 import { SAVE_KEY, QUALITY_PRESETS, detectQuality, LOC } from './config.js';
 import { ITEMS } from './items.js';
 
@@ -69,6 +70,11 @@ export class Game {
     set(25, 'Budowanie królestwa…');
     await this.tick();
     this.world = new World(this.scene, this.textures, this.quality);
+
+    // kinowy potok renderowania (TAA + upscaling, SSAO, bloom, DoF, IBL)
+    this.pipeline = new RenderPipeline(this.renderer, this.scene, this.camera, this.world, {
+      getFocus: () => this.camera.position.distanceTo(this.player?.group?.position ?? this.camera.position) + 1.5,
+    });
 
     set(60, 'Osadzanie mieszkańców…');
     await this.tick();
@@ -129,6 +135,7 @@ export class Game {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
+    this.pipeline?.resize();
   }
 
   // ---------- JAKOŚĆ ----------
@@ -144,7 +151,9 @@ export class Game {
   applyQuality(name) {
     const q = QUALITY_PRESETS[name] || QUALITY_PRESETS.medium;
     this._basePR = Math.min(devicePixelRatio || 1, q.pixelRatio, 2); // twardy limit: telefony 3x+ zjadają GPU
-    this.renderer.setPixelRatio(this._basePR * (this.dynScale || 1));
+    // potok post-processingu sam zarządza pixel ratio (wewnętrzna skala zamiast PR)
+    if (this.pipeline) this.pipeline.setQuality(name, this._basePR, this.dynScale || 1);
+    if (!this.pipeline?.enabled) this.renderer.setPixelRatio(this._basePR * (this.dynScale || 1));
     this.world.applyQuality(name);
     if (this.fx) this.fx.setQuality(name);
     this.scene.fog.far = q.viewDistance + 200;
@@ -195,7 +204,8 @@ export class Game {
 
   // Aplikuje dynamiczną skalę rozdzielczości + gęstość roślinności
   applyDynScale() {
-    if (this._basePR) this.renderer.setPixelRatio(this._basePR * this.dynScale);
+    if (this.pipeline?.enabled) this.pipeline.setDynScale(this.dynScale);
+    else if (this._basePR) this.renderer.setPixelRatio(this._basePR * this.dynScale);
     if (this.world.setVegScale) this.world.setVegScale(0.55 + 0.45 * this.dynScale);
   }
 
@@ -306,6 +316,7 @@ export class Game {
   respawn() {
     this.ui.hideDeath();
     this.player.respawn(this);
+    this.pipeline?.resetHistory();
     this.state = 'playing';
     this.input.enabled = true;
     // odstrasz wrogów wokół zamku
@@ -650,6 +661,7 @@ export class Game {
       this.ui.refreshQuestMarkers();
       this.achv?.check();
       this.ui.updateSpellBadge?.();
+      this.pipeline?.resetHistory();
       return true;
     } catch { return false; }
   }
@@ -733,7 +745,9 @@ export class Game {
       if (this._saveT > 30) { this._saveT = 0; this.save(); }
       // HUD
       this.ui.updateHUD();
-      this.renderer.render(this.scene, this.camera);
+      // render: kinowy potok (TAA/SSAO/bloom/DoF/IBL) z fallbackiem wewnętrznym
+      if (this.pipeline) this.pipeline.render(dt);
+      else this.renderer.render(this.scene, this.camera);
     };
     frame();
   }

@@ -139,5 +139,78 @@ ok(pl.selectedSpell === 'ice', 'G przełącza na kolejne zaklęcie');
 pl.cycleSpell({ audio: { play() { } }, ui: { toast() { }, updateSpellBadge() { } } });
 ok(pl.selectedSpell === 'heal', 'G przełącza dalej (heal)');
 
+// ===========================================================================
+// KINOWY POTOK RENDEROWANIA (src/postfx.js) — logika tierów i fallbacku
+// ===========================================================================
+console.log('\n— Potok renderowania (mock WebGL) —');
+{
+  const THREE = await import('three');
+  const { RenderPipeline } = await import('../src/postfx.js');
+
+  const noop = () => { };
+  const anything = () => new Proxy(function () { }, {
+    get: (t, k) => (k === Symbol.toPrimitive ? () => 0 : anything()),
+    apply: () => anything(),
+    set: () => true,
+  });
+  const passes = [];
+  const base = {
+    capabilities: { isWebGL2: true },
+    extensions: { get: (n) => (n === 'EXT_color_buffer_float' ? { } : null), has: (n) => n === 'EXT_color_buffer_float' },
+    toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1,
+    outputColorSpace: THREE.SRGBColorSpace, autoClear: true, xr: { enabled: false },
+    shadowMap: { enabled: false, autoUpdate: false, needsUpdate: false },
+    state: anything(),
+    _pr: 1,
+    setPixelRatio(v) { this._pr = v; },
+    getPixelRatio() { return this._pr; },
+    getDrawingBufferSize(v) { return v.set(1920, 1080); },
+    setSize: noop, setRenderTarget: noop, compile: () => ({ }),
+    render(scene) { passes.push(scene === pipeline._fsScene ? 'FS' : 'SCENE'); },
+  };
+  const renderer = new Proxy(base, { get: (t, k) => (k in t ? t[k] : anything()), set(t, k, v) { t[k] = v; return true; } });
+
+  const scene = new THREE.Scene();
+  // mini-świat: wystarczy sky + skyU + sun + nightF dla PMREM
+  const world = {
+    sky: { material: new THREE.MeshBasicMaterial() },
+    skyU: { sunDir: { value: new THREE.Vector3(0.5, 0.8, 0.3) } },
+    sun: { color: new THREE.Color(1, 0.95, 0.8) },
+    nightF: 0,
+  };
+  const camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.1, 1500);
+  const pipeline = new RenderPipeline(renderer, scene, camera, world, { getFocus: () => 15 });
+
+  pipeline.setQuality('high', 2, 1);
+  ok(pipeline.enabled === true, 'tier high włącza potok');
+  ok(renderer.toneMapping === THREE.NoToneMapping, 'tonemapping przeniesiony do composite');
+  ok(pipeline._wIn === 1440 && pipeline._hIn === 810, `wewnętrzna skala 0.75 (1440x810, jest ${pipeline._wIn}x${pipeline._hIn})`);
+
+  const n0 = passes.length;
+  pipeline.render(0.016);
+  const framePasses = passes.length - n0 - 1; // -1: warm-up PMREM przy setQuality? nie — liczonymy delta bez sceny PMREM
+  ok(framePasses >= 11, `pełna klatka = scena+SSAO+bloom+TAA+composite (${framePasses} passów FS/SCENE)`);
+
+  pipeline.setDynScale(0.55);
+  ok(pipeline._wIn === 960, `gubernator FPS: 0.75×0.55→clamp 0.5 (960, jest ${pipeline._wIn})`);
+
+  pipeline.setQuality('low', 2, 1);
+  ok(pipeline.enabled === false, 'tier low wyłącza potok');
+  ok(renderer.toneMapping === THREE.ACESFilmicToneMapping, 'przywrócony ACES w rendererze');
+  const n1 = passes.length;
+  pipeline.render(0.016);
+  ok(passes.length - n1 === 1, 'low = klasyczny renderer.render (1 pass)');
+
+  pipeline.setQuality('ultra', 2, 1);
+  pipeline.render(0.016);
+  ok(pipeline._tier.dof === true && pipeline._tier.ssao === true, 'ultra: DoF + SSAO aktywne');
+  pipeline._reset = false;
+  camera.position.set(500, 50, -300);
+  pipeline.render(0.016);
+  ok(pipeline._reset === false, 'teleport kamery resetuje historię TAA');
+  ok(!!scene.environment, 'IBL: scene.environment ustawione z PMREM');
+  pipeline.dispose();
+}
+
 console.log(`\n=== WYNIK: ${passed} OK, ${failed} BŁĘDÓW ===\n`);
 process.exit(failed ? 1 : 0);

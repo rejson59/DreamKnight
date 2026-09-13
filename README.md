@@ -65,6 +65,11 @@ Dwuklik/przytrzymanie przycisku zaklęcia zmienia czar.
 
 - Otwarty świat 3D: instancjonowana roślinność, cząsteczki, animowane flagi,
   woda, dym, ogień, chmury, ptaki, gwiazdy
+- **Kinowy potok renderowania (v3.1)**: temporal anti-aliasing z wektorami
+  ruchu i upscalingiem w stylu DLSS (render 0.7–0.85× → skalowanie czasowe),
+  SSAO, bloom HDR, bokeh (mgła głębi), ACES + filmowy grading „Natural”,
+  ziarno i winieta; IBL — odbicia środowiskowe z proceduralnego nieba (PMREM)
+  odświeżane wraz z cyklem dnia; automatyczny fallback na słabszych GPU
 - Dialogi i handel (7 sklepów), kuźnia z **ulepszaniem broni** (odłamki kryształu!),
   stajnia (kupno konia!), czarodziej i czarownica
 - **9 zadań głównych** + 5 pobocznych, dziennik, śledzenie celu, minimapa
@@ -91,6 +96,35 @@ node test/smoke.mjs
 Test dymny (bez przeglądarki) sprawdza przepływ zadań (w tym nowy łańcuch bagien),
 system osiągnięć, ulepszenia broni, przełączanie zaklęć oraz logikę wędkowania.
 
+## 🎬 Jak działa kinowy rendering (src/postfx.js)
+
+```
+[kamera z jitterem Haltona]──► SCENA ──► rtScene (0.7–0.85×, linear HDR + głębia)
+                                   │
+                                   ├─► SSAO (½ wewn.) ─► blur ─► aoTex
+                                   ├─► BLOOM (bright-pass + piramida 4 poziomów)
+                                   └─► TAA RESOLVE (pełny rozdz.):
+                                         bieżąca klatka (bilinear)
+                                       + historia (reprojekcja: głębia → świat →
+                                         macierz VP poprzedniej klatki)
+                                       + clamp do sąsiedztwa (bez ghostingu)
+                                       ──► COMPOSITE → ekran:
+                                             bokeh DoF → AO → bloom → wyostrzenie
+                                             → ekspozycja → ACES → grading „Natural”
+                                             → sRGB → winieta + ziarno filmowe
+
+PMREMGenerator.fromScene(proceduralne niebo) ──► scene.environment (IBL, co ~4 s)
+```
+
+- **Wydajność (styl DLSS):** scena — najdroższa część klatki — renderowana jest
+  w 49–72% pikseli; tanie passy pełnoekranowe (TAA/composite) dopełniają obraz.
+  Gubernator FPS steruje skalą wewnętrzną (0.5–1.0×) zamiast pixel ratio.
+- **Tonemapping:** materiały renderują się do bufora linear HDR
+  (`NoToneMapping` w rendererze), a ACES jest aplikowany w passie composite —
+  dopiero wtedy bloom działa na prawdziwych wartościach HDR.
+- **Fallback:** brak `EXT_color_buffer_float` lub jakość „Niska” → klasyczny
+  `renderer.render()` z ACES (identyczny stary wygląd).
+
 ---
-*Dream Knight v3.0 „Mroczne Bagna” — zbudowano w Arena.ai Agent Mode (Three.js + Vite)*
+*Dream Knight v3.1 „Wersja Kinowa” — zbudowano w Arena.ai Agent Mode (Three.js + Vite)*
 ---
